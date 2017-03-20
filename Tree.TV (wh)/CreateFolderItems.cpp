@@ -138,7 +138,7 @@ void CheckPodcastUpdate() {
   THmsScriptMediaItem Podcast=FolderItem; TJsonObject JSON, JFILE; TJsonArray JARRAY;
   string sData, sName, sLang, sExt, sMsg; int i, mpiTimestamp=100602, mpiSHA, mpiScript; bool bChanges=false;
   
-  if ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast = Podcast.ItemParent; // Ищем скрипт получения ссылки на поток
+  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent; // Ищем скрипт получения ссылки на поток
   // Если после последней проверки прошло меньше получаса - валим
   if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 1800)) return;
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
