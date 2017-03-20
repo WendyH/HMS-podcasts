@@ -186,7 +186,7 @@ void CheckPodcastUpdate() {
 
   FolderItem.DeleteChildItems(); // Удаление существующих ссылок
 
-  if (Pos('--nocheckupdates', mpPodcastParameters) < 1) CheckPodcastUpdate(); // Проверка обновлений подкаста
+  if ((Pos('--nocheckupdates', mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate(); // Проверка обновлений подкаста
 
   CheckParameters(); // Проверка установленных параметров подкаста
 
