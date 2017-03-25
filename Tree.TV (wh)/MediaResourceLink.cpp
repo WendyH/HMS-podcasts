@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.03.21
+﻿// VERSION = 2017.03.25
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 
@@ -258,21 +258,22 @@ void GetLink_TreeTV() {
   
   sHeaders = mpFilePath+'\r\n'+
              'X-Requested-With: XMLHttpRequest\r\n'+
-             'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:51.0) Gecko/20100101 Firefox/51.0\r\n'+
+             'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36\r\n'+
              'Accept-Encoding: identity\r\n'+
              'Cookie: test=1;\r\n'+
              'Origin: http://player.tree.tv\r\n';
+
   if (!HmsRegExMatch('/player/(\\d+)', mpFilePath, sID)) return;
-  
+
   // Загружаем страницу с фильмом, где устанавливаются кукисы UserEnter и key (они важны!)
   sHtml = HmsDownloadURL('http://tree.tv/player/'+sId+'/1', 'Referer: '+sHeaders, true);
   // Подтверждение своего Fingerprint (значения mycook в куках)
   sPost = HmsDownloadURL("http://wonky.lostcut.net/fingerprint.php");
-  HmsRegExMatch2('(result=(.*?)&.*)$', sPost, sPost, sVal);
+  HmsRegExMatch('result=(.*?)&', sPost, sVal);
   sHeaders += 'Cookie: mycook='+sVal+'\r\n';
   sData = HmsSendRequestEx('tree.tv', '/film/index/imprint', 'POST', 'application/x-www-form-urlencoded', sHeaders, sPost, 80, 0x10, '', true);
   // Получения и вычисления значений g, p, n через запросы к /guard
-  sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key=1", 80, 0x10, '', true);
+  sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key=2", 80, 0x10, '', true);
   if (HmsRegExMatch('"g":(\\d+)', sData, sVal)) g = StrToInt(sVal);
   if (HmsRegExMatch('"p":(\\d+)', sData, sVal)) p = StrToInt(sVal);
   sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key="+Str(g % p), 80, 0x10, '', true);
