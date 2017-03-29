@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.03.19
+﻿// VERSION = 2017.03.29
 int       DEBUG        = 0; // Флаг отладки. 1 - при неудачном получении ссылки сохранять файл на рабочий стол ex-fs.log. 0 - не сохранять
 string    gsUrlBase    = "http://moonwalk.co"; // База для относительных ссылок
 int       gnTotalItems = 0;                    // Счётчик созданных элементов
@@ -94,14 +94,13 @@ void GetLink_Moonwalk(string sLink) {
   bHdsDump = Pos('--hdsdump'      , mpPodcastParameters) > 0;
   bQualLog = Pos('--qualitylog'   , mpPodcastParameters) > 0;
   
+  sLink = ReplaceStr(sLink, 'moonwalk.co', 'moonwalk.cc');
+  sLink = ReplaceStr(sLink, 'moonwalk.pw', 'moonwalk.cc');
   HmsRegExMatch2('//(.*?)(/.*)', sLink, sServ, sPage);
   sHtml = HmsSendRequestEx(sServ, sPage, 'GET', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, '', 80, 0, sRet, true);
-  if (HmsRegExMatch('<body>\\s*?</body>', sHtml, '') && HmsRegExMatch('moonwalk.pw', sLink, '')) {
-    sLink = ReplaceStr(sLink, 'moonwalk.pw', 'moonwalk.cc');
-    HmsRegExMatch2('//(.*?)(/.*)', sLink, sServ, sPage);
-    sHtml = HmsSendRequestEx(sServ, sPage, 'GET', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, '', 80, 0, sRet, true);
-  }
   if (HmsRegExMatch('<iframe[^>]+src="(http.*?)"', sHtml, sLink)) {
+    sLink = ReplaceStr(sLink, 'moonwalk.co', 'moonwalk.cc');
+    sLink = ReplaceStr(sLink, 'moonwalk.pw', 'moonwalk.cc');
     HmsRegExMatch2('//(.*?)(/.*)', sLink, sServ, sPage);
     sHtml = HmsSendRequestEx(sServ, sPage, 'GET', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, '', 80, 0, sRet, true);
   }
@@ -118,6 +117,7 @@ void GetLink_Moonwalk(string sLink) {
   if (HmsRegExMatch('ajaxSetup\\([^)]+headers:(.*?)}', sHtml, sPage)) {
     while(HmsRegExMatch3('["\']([\\w-_]+)["\']\\s*?:\\s*?["\'](\\w+)["\'](.*)', sPage, sVal, sVer, sPage, PCRE_SINGLELINE)) sHeaders += sVal+': '+sVer+'\r\n';
   }
+  
   if (!HmsRegExMatch2('/new_session.*?(\\w+)\\s*?=\\s*?\\{(.*?)\\}', sHtml, sVal, sPost)) {
     HmsLogMessage(2, mpTitle+': Не найдены параметры new_session на странице.');
   }
@@ -127,12 +127,17 @@ void GetLink_Moonwalk(string sLink) {
   sPost = ReplaceStr(sPost, ',', '&');
   sPost = ReplaceStr(sPost, 'condition_detected?1=', '');
   sPost = HmsRemoveLineBreaks(sPost);
-  //if (HmsRegExMatch2("((mw_key=[^&]*?)c)", sPost, sData, sRet))
-  //  sPost = ReplaceStr(sPost, sData, sRet+"%D1%81"); // Меняем первую английскую 'c' на русскую 'с' (urlencode unicode символа)
+  // Замена имён переменных их значениями в параметрах запроса
+  sData = sPost;
+  while(HmsRegExMatch2('.(=(\\w+).*)', sData, sData, sVar)) {
+    if (HmsRegExMatch('var\\s'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal))
+      sPost = ReplaceStr(sPost, '='+sVar, '='+sVal);
+  }
+  // Замена имён переменных их значениями в параметрах запроса, установленных после
   sData = sHtml;
-  while (HmsRegExMatch2(sVal+'\\.(\\w+)\\s*=(.*)', sData, sVar, sData, PCRE_SINGLELINE)
-      && HmsRegExMatch(sVar+'\\s*=\\s*["\']([^"\']+)', sHtml, sVal)) {
-    sPost += '&'+sVar+'='+sVal;
+  while(HmsRegExMatch3('.(post_method\\.(\\w+)\\s*=\\s*(\\w+).*)', sData, sData, sVar, sVal)) {
+    if (HmsRegExMatch('var\\s'+sVal+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal))
+      sPost += '&'+sVar+'='+sVal;
   }
   HmsRegExMatch('//(.*?)/', sLink, sServ);
   sData = HmsSendRequest(sServ, '/sessions/new_session', 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
@@ -234,9 +239,7 @@ void GetLink_Moonwalk(string sLink) {
       HmsLogMessage(1, mpTitle+': Создан лог файл '+sVal);
     }
   }
-  
 } // Конец функции поулчения ссылки с moonwalk.cc
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание информационной ссылки
