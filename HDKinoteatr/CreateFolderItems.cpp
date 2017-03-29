@@ -354,8 +354,8 @@ void CheckMoonwalkFunction() {
   } 
   FolderItem.DeleteChildItems();
 
-  //if (Pos('--nocheckupdates'  , mpPodcastParameters)<1) CheckPodcastUpdate();
-  //if (Pos('--noupdatemoonwalk', mpPodcastParameters)<1) CheckMoonwalkFunction();
+  if (Pos('--nocheckupdates'  , mpPodcastParameters)<1) CheckPodcastUpdate();
+  if (Pos('--noupdatemoonwalk', mpPodcastParameters)<1) CheckMoonwalkFunction();
  
   if      (Pos('/serial/', mpFilePath) > 0) CreateMoonwallkLinks(mpFilePath); // вариант перевода сериала
   else if (LeftCopy(mpFilePath, 4)=='http') CreateLinksOfVideo(); // создание ссылок на серии в избранном
