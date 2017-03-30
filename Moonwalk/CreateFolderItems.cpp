@@ -1,9 +1,8 @@
-﻿// VERSION = 2017.03.19
+﻿// VERSION = 2017.03.30
 string    gsUrlBase    = 'http://moonwalk.co'; // База для относительных ссылок
 int       gnTotalItems = 0;                    // Счётчик созданных элементов
 TDateTime gStart       = Now;                  // Время начала запуска скрипта
 string    gsTime       = "02:30:00.000";       // Продолжительность видео
-int gnMaxPages=10, gnMaxInGroup=100; bool gbYearInTitle=false; char gsGroupMode='';
 
 // Регулярные выражения для поиска на странице блоков с информацией о видео
 string gsPatternBlock = '(<tr>.*?</tr>)';           // Искомые блоки
@@ -118,15 +117,15 @@ string GetGroupName(string sName) {
 ///////////////////////////////////////////////////////////////////////////////
 // Загрузка страниц и парсинг
 void LoadAndParse() {
-  string sHtml, sData, sName, sLink, sImg, sYear, sPage, sVal, sKPID, sTran;
-  THmsScriptMediaItem Item, Folder = FolderItem; TRegExpr RegEx;
-  int i, n, nPages=0, iCnt=0, nGrp=0; char sGrp=""; bool bGroup, bJustLinks;
+  string sHtml, sData, sName, sLink, sImg, sYear, sPage, sVal, sKPID, sTran, sGroupMode="", sGrp="";
+  THmsScriptMediaItem Item, Folder = FolderItem; TRegExpr RegEx; bool bGroup, bJustLinks, bYearInTitle=false;
+  int i, n, nPages=0, iCnt=0, nGrp=0, nMaxPages=10, nMaxInGroup=100, nMinInGroup=100;
   
   // Проверка установленных дополнительных параметров
-  if (HmsRegExMatch('--maxingroup=(\\d+)', mpPodcastParameters, sVal)) gnMaxInGroup = StrToInt(sVal);
-  if (HmsRegExMatch('--maxpages=(\\d+)'  , mpPodcastParameters, sVal)) gnMaxPages   = StrToInt(sVal);
-  HmsRegExMatch('--group=(\\w+)', mpPodcastParameters, gsGroupMode);
-  gbYearInTitle = (Pos('--yearintitle', mpPodcastParameters)>0);
+  if (HmsRegExMatch('--maxingroup=(\\d+)', mpPodcastParameters, sVal)) nMaxInGroup = StrToInt(sVal);
+  if (HmsRegExMatch('--maxpages=(\\d+)'  , mpPodcastParameters, sVal)) nMaxPages   = StrToInt(sVal);
+  HmsRegExMatch('--group=(\\w+)', mpPodcastParameters, sGroupMode);
+  bYearInTitle = (Pos('--yearintitle', mpPodcastParameters)>0);
   bJustLinks    = (Pos('--justlinks'  , mpPodcastParameters)>0);
   
   //mpFilePath = ReplaceStr(mpFilePath, 'moonwalk/search?', 'moonwalk/search_as?');
@@ -135,7 +134,7 @@ void LoadAndParse() {
     // Если нет ссылки - делаем поиск названия
     sLink = gsUrlBase+'/moonwalk/search_as?search_for=&commit=%D0%9D%D0%B0%D0%B9%D1%82%D0%B8&sq='+HmsPercentEncode(HmsUtf8Encode(mpTitle));
     sHtml = HmsDownloadURL(sLink, gsHeaders, true);
-    gnMaxPages = 1;
+    nMaxPages = 1;
     
   } else if (RightCopy(mpFilePath, 4)=='.txt') {
     gsPatternBlock = '(.*?)<br>';         // Искомые блоки
@@ -165,7 +164,7 @@ void LoadAndParse() {
 
   // =========================================================================
   // Дозагрузка страниц
-  if ((gnMaxPages!=0) && (nPages>gnMaxPages)) nPages = gnMaxPages;
+  if ((nMaxPages!=0) && (nPages>nMaxPages)) nPages = nMaxPages;
   for (i=2; i<=nPages; i++) {
     HmsSetProgress(Trunc(i*100/nPages));
     HmsShowProgress(Format('%s: Загрузка страницы %d из %d', [mpTitle, i, nPages]));
@@ -184,9 +183,9 @@ void LoadAndParse() {
   RegEx = TRegExpr.Create(gsPatternBlock, PCRE_SINGLELINE || PCRE_MULTILINE);
   try {
     // Определяем, если блоков в загруженном более чем gnMaxInGroup, включаем группировку
-    if ((gsGroupMode!='alph') && (gsGroupMode!='year')) {
+    if ((sGroupMode!='alph') && (sGroupMode!='year')) {
       i=0; if (RegEx.Search(sHtml)) do i++; while (RegEx.SearchAgain());
-      bGroup = (i > gnMaxInGroup);
+      bGroup = (i > nMaxInGroup);
     }
     // Главный цикл поиска блоков
     if (RegEx.Search(sHtml)) do {
@@ -206,18 +205,18 @@ void LoadAndParse() {
       if ((sKPID!='') && (sKPID!='0')) sImg = 'http://www.kinopoisk.ru/images/film/'+sKPID+'.jpg';
 
       if (sTran!='') sName += ' ['+sTran+']';
-      if (gbYearInTitle && (sYear!='') && (Pos(sYear, sName)<1)) sName += ' ('+sYear+')';
+      if (bYearInTitle && (sYear!='') && (Pos(sYear, sName)<1)) sName += ' ('+sYear+')';
       
       // Контроль группировки (создаём папку с именем группы)
-      if (gsGroupMode=='alph') {
+      if (sGroupMode=='alph') {
         Folder = FolderItem.AddFolder(GetGroupName(sName));
         Folder[mpiFolderSortOrder] = "mpTitle";
-      } else if (gsGroupMode=='year') {
+      } else if (sGroupMode=='year') {
         Folder = FolderItem.AddFolder(sYear);
         Folder[mpiFolderSortOrder] = "mpTitle";
         Folder[mpiYear           ] = sYear;
       } else if (bGroup) {
-        iCnt++; if (iCnt>=gnMaxInGroup) { nGrp++; iCnt=0; }
+        iCnt++; if (iCnt>=nMaxInGroup) { nGrp++; iCnt=0; }
         Folder = FolderItem.AddFolder(Format('%.2d', [nGrp]));
       }
 
@@ -233,10 +232,10 @@ void LoadAndParse() {
   } finally { RegEx.Free(); }
 
   // Сортируем в базе данных программы созданные элементы
-  if (gsGroupMode=='alph') {
+  if (sGroupMode=='alph') {
     FolderItem.Sort('mpTitle');
     for (i=0; i<FolderItem.ChildCount; i++) FolderItem.ChildItems[i].Sort('mpTitle');
-  } else if (gsGroupMode=='year') FolderItem.Sort('-mpYear');
+  } else if (sGroupMode=='year') FolderItem.Sort('-mpYear');
 
   HmsLogMessage(1, mpTitle+': создано элементов - '+IntToStr(gnTotalItems));
 }
@@ -354,7 +353,7 @@ void CheckPodcastUpdate() {
       }
     } 
   } finally { JSON.Free; if (bChanges) HmsDatabaseAutoSave(true); }
-} //Вызов в главной процедуре: if (Pos('--nocheckupdates', mpPodcastParameters) < 1) CheckPodcastUpdate();
+} //Вызов в главной процедуре: if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate();
 
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка актуальности версии функции GetLink_Moonwalk в скриптах
@@ -389,7 +388,7 @@ void CheckMoonwalkFunction() {
 {
   FolderItem.DeleteChildItems(); // Удаляем созданные ранее элементы в текущей папке
 
-  if (Pos('--nocheckupdates'  , mpPodcastParameters)<1) CheckPodcastUpdate();
+  if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate(); // Проверка обновлений подкаста
   if (Pos('--noupdatemoonwalk', mpPodcastParameters)<1) CheckMoonwalkFunction();
   
   if (HmsRegExMatch("/(serial|movie|video)/", mpFilePath, '')) {
