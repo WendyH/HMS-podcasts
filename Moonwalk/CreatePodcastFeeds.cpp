@@ -1,7 +1,15 @@
-﻿// VERSION = 2017.03.19
+﻿// VERSION = 2017.03.30
+///////////////////////  Создание структуры подкаста  /////////////////////////
+#define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
+#define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
+
+///////////////////////////////////////////////////////////////////////////////
+//               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 string gsUrlBase="http://moonwalk.co"; int gnTotalItems=0; TDateTime gTimeStart=Now;
 
-///////////////////////  Создание структуры подкаста  /////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////
+//                             Ф У Н К Ц И И                                 //
 
 ///////////////////////////////////////////////////////////////////////////////
 // Функция создания динамической папки с указанным скриптом
@@ -79,7 +87,8 @@ THmsScriptMediaItem CreateItem(THmsScriptMediaItem Parent, char sTitle='', char 
   CreateSearchFolder (FolderItem, '01. Поиск');
   Folder = CreateItem(FolderItem, '02. Новинки фильмов', '/moonwalk/search_as?search_for=film');
   Folder[mpiPodcastParameters] = '--maxpages=4 --maxingroup=160';
-
+  Folder[mpiComment          ] = '--update';
+  
   Folder = CreateItem(FolderItem, '03. По годам');
   Folder[mpiPodcastParameters] = '--maxpages=10';
   Folder[mpiFolderSortOrder  ] = mpiTitle;

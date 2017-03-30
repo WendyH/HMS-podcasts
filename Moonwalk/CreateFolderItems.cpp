@@ -1,4 +1,11 @@
 ﻿// VERSION = 2017.03.30
+////////////////////////  Создание  списка  видео   ///////////////////////////
+#define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
+#define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
+
+///////////////////////////////////////////////////////////////////////////////
+//               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
+THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
 string    gsUrlBase    = 'http://moonwalk.co'; // База для относительных ссылок
 int       gnTotalItems = 0;                    // Счётчик созданных элементов
 TDateTime gStart       = Now;                  // Время начала запуска скрипта
@@ -14,7 +21,7 @@ string gsPatternYear  = '<td>(\\d{4})</td>';        // Год
 string gsPatternAudio = '';                         // Озвучка / Перевод
 string gsPatternPages = 'pagination.*/search_as/(\\d+)[/\\?]'; // Регулярное выражение для поиска максимального номера страницы для дозагрузки
 string gsPagesParams  = 'search_as/<PN>';                      // Параметр с номером страницы, который добавляется к ссылке
-string gsHeaders = 'Referer: '+gsUrlBase+'/\r\n'+           // HTTP заголовки для запросов
+string gsHeaders = 'Referer: '+gsUrlBase+'/\r\n'+              // HTTP заголовки для запросов
                    'Accept-Encoding: gzip, deflate\r\n'+
                    'Origin: '+gsUrlBase+'\r\n'+
                    'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36\r\n';
@@ -23,7 +30,15 @@ string    gsTVDBInfo   = "";
 bool gbUseSerialKPInfo = false;
 
 ///////////////////////////////////////////////////////////////////////////////
-//                              Ф У Н К Ц И И                                //
+//                             Ф У Н К Ц И И                                 //
+
+///////////////////////////////////////////////////////////////////////////////
+// Установка переменной Podcast: поиск родительской папки, содержащий скрипт
+THmsScriptMediaItem GetRoot() {
+  Podcast = FolderItem; // Начиная с текущего элемента, ищется создержащий срипт
+  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
+  return Podcast;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Получение информации с Kinopoisk о сериале
@@ -237,7 +252,6 @@ void LoadAndParse() {
     for (i=0; i<FolderItem.ChildCount; i++) FolderItem.ChildItems[i].Sort('mpTitle');
   } else if (sGroupMode=='year') FolderItem.Sort('-mpYear');
 
-  HmsLogMessage(1, mpTitle+': создано элементов - '+IntToStr(gnTotalItems));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -372,6 +386,7 @@ void CheckMoonwalkFunction() {
     try {
       JSON.LoadFromString(sData);
       sFuncNew = JSON.S['files\\GetLink_Moonwalk.cpp\\content'];
+      HmsRegExMatch(sPatternMoonwalkFunction, sFuncNew, sFuncNew, 1, PCRE_SINGLELINE);
       if ((sFuncNew!='') && (Podcast[mpiMWVersion]!=JSON.S['updated_at'])) {
         Podcast[550] = ReplaceStr(Podcast[550], sFuncOld, sFuncNew); // Заменяем старую функцию на новую
         Podcast[mpiMWVersion] = JSON.S['updated_at'];
@@ -396,5 +411,7 @@ void CheckMoonwalkFunction() {
   } else {
     LoadAndParse();                   // Запускаем загрузку страниц и создание папок видео
   }
+
+  HmsLogMessage(1, Podcast[mpiTitle]+' "'+mpTitle+'": Создано элементов - '+IntToStr(gnTotalItems));
 }
 
