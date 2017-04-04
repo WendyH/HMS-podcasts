@@ -1,4 +1,4 @@
-﻿// 2017.03.29
+﻿// 2017.04.04
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -11,7 +11,7 @@ string    gsUrlBase     = "http://hdkinoteatr.com";
 int       gnTotalItems  = 0; 
 TDateTime gStart        = Now;
 string    gsAPIUrl      = "http://api.lostcut.net/hdkinoteatr/";
-int       gnDefaultTime = 4000;
+int       gnDefaultTime = 6000;
 bool      gbQualityLog  = false;
 string    gsTVDBInfo    = "";
 bool gbUseSerialKPInfo  = false;
@@ -27,7 +27,6 @@ THmsScriptMediaItem GetRoot() {
   return Podcast;
 }
 
-///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с moonwalk.cc
 void GetLink_Moonwalk(string sLink) {
@@ -217,14 +216,15 @@ bool GetLink_VK(string sLink) {
   
   sHtml = HmsDownloadUrl(sLink, 'Referer: '+sLink, true);
   
-  if ((sHtml=="") || !HmsRegExMatch('vtag["\':=\\s]+([0-9a-z]+)', sHtml, vtag)) {
+  if ((sHtml=="") || (!HmsRegExMatch('vtag["\':=\\s]+([0-9a-z]+)', sHtml, vtag) && !HmsRegExMatch('"url\\d+":"', sHtml, ''))) {
+    //LogInSiteVK();
     if (HmsRegExMatch2("oid=(.*?)&.*?id=(.*?)&", sLink, sVal, sID))
       sLink = "https://vk.com/video"+sVal+"_"+sID;
     sHtml = HmsDownloadUrl(sLink, 'Referer: '+sLink, true);
   }
   
   sHtml = ReplaceStr(sHtml, '\\', '');
-  host  = ''; max_hd = '2';
+  host = ''; max_hd = '2';
   
   sLink = '';
   HmsRegExMatch('--quality=(\\d+)', mpPodcastParameters, sQSel);
@@ -242,6 +242,7 @@ bool GetLink_VK(string sLink) {
     if (HmsRegExMatch('<div[^>]+video_ext_msg.*?>(.*?)</div>', sHtml, sLink) || 
     HmsRegExMatch('<div style="position:absolute; top:50%; text-align:center; right:0pt; left:0pt;.*?>(.*?)</div>', sHtml, sLink)) {
       HmsLogMessage(2, PodcastItem.ItemOrigin.ItemParent[mpiTitle]+': vk.com сообщает - '+HmsHtmlToText(sLink));
+      VideoMessage('VK.COM СООБЩАЕТ:\n\n'+HmsHtmlToText(sLink));
       
     } else {
       HmsLogMessage(2, mpTitle+': не удалось обработать ссылку на vk.com');
@@ -526,8 +527,9 @@ THmsScriptMediaItem CreateFolder(THmsScriptMediaItem Parent, string sName, strin
   Item[mpiCreateDate ] = DateTimeToStr(IncTime(gStart, 0, -gnTotalItems, 0, 0)); // Для обратной сортировки по дате создания
   Item[mpiSeriesTitle] = mpSeriesTitle;
   Item[mpiYear       ] = mpYear;
-  gnTotalItems++;              // Увеличиваем счетчик созданных элементов
-  return Item;                 // Возвращаем созданный объект
+  Item[mpiFolderSortOrder] = "-mpCreateDate";
+  gnTotalItems++;               // Увеличиваем счетчик созданных элементов
+  return Item;                  // Возвращаем созданный объект
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -730,6 +732,7 @@ void CreateMoonwallkLinks(string sLink, string sKPID='') {
   }
   
   sData = HmsDownloadURL(gsAPIUrl+'series?url='+HmsHttpEncode(sLink)+'&kpid='+sKPID, "Accept-Encoding: gzip, deflate", true);
+  sData = HmsUtf8Decode(sData);
   PLAYLIST = TJsonObject.Create();
   try {
     PLAYLIST.LoadFromString(sData);
@@ -790,10 +793,32 @@ void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+THmsScriptMediaItem GetItemWithInfo() {
+  THmsScriptMediaItem Item = PodcastItem;
+  while ((Trim(Item[mpiJsonInfo])=="") && (Item.ItemParent!=nil)) Item=Item.ItemParent;
+  if (Trim(Item[mpiJsonInfo])=="") return nil;
+  return Item;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Пометка элемента как "Просмотренный"
+void ItemMarkViewed(THmsScriptMediaItem Item) {
+  string s1, s2;
+  if (Pos('[П]', Item[mpiTitle])>0) return;
+  if (HmsRegExMatch2('^(\\d+)(.*)', Item[mpiTitle], s1, s2))
+    Item[mpiTitle] = s1 + ' [П] '+Trim(s2);
+  else
+    Item[mpiTitle] = '[П] '+Trim(Item[mpiTitle]);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 void FillVideoInfo(THmsScriptMediaItem Item) {
+  string sData='', sSeason, sEpisode, sName, s1, s2;
+  THmsScriptMediaItem Folder = GetItemWithInfo();
+  if (Folder!=nil) sData = Folder[mpiJsonInfo];
   TJsonObject VIDEO = TJsonObject.Create();
   try {
-    VIDEO.LoadFromString(PodcastItem[mpiJsonInfo]);
+    VIDEO.LoadFromString(sData);
     Item[mpiYear    ] = VIDEO.I['year'     ];
     Item[mpiGenre   ] = VIDEO.S['genre'    ];
     Item[mpiDirector] = VIDEO.S['director' ];
@@ -801,6 +826,26 @@ void FillVideoInfo(THmsScriptMediaItem Item) {
     Item[mpiActor   ] = VIDEO.S['actors'   ];
     Item[mpiAuthor  ] = VIDEO.S['scenarist'];
     Item[mpiComment ] = VIDEO.S['translation'];
+
+    if (VIDEO.I['time']!=0) 
+      Item[mpiTimeLength] = HmsTimeFormat(VIDEO.I['time'])+'.000';
+    
+    if (HmsRegExMatch2('season=(\\d+).*?episode=(\\d+)', Item[mpiFilePath], sSeason, sEpisode)) {
+      Item[mpiSeriesSeasonNo ] = StrToInt(sSeason );
+      Item[mpiSeriesEpisodeNo] = StrToInt(sEpisode);
+      Item[mpiSeriesEpisodeTitle] = Item[mpiTitle];
+      if (Trim(VIDEO.S['name_eng'])!="")
+        Item[mpiSeriesTitle] = VIDEO.S['name_eng'];
+      else
+        Item[mpiSeriesTitle] = VIDEO.S['name'];
+      
+      if ((Folder!=nil) && (Pos('--markonplay', mpPodcastParameters)>0)) {
+        if (Pos('s'+sSeason+'e'+sEpisode+';', Folder[mpiComment])>0)
+          ItemMarkViewed(Item);
+      }
+      
+    }
+      
   } finally { VIDEO.Free; }
 }
 
@@ -847,7 +892,7 @@ void CreateLinks() {
         bool bExist = HmsFindMediaFolder(Item.ItemID, mpFilePath) != nil;
         if (bExist) { sName = "Удалить из избранного"; sLink = "-FavDel="+PodcastItem.ItemParent.ItemID+";"+mpFilePath; }
         else        { sName = "Добавить в избранное" ; sLink = "-FavAdd="+PodcastItem.ItemParent.ItemID+";"+mpFilePath; }
-        CreateMediaItem(PodcastItem, sName, sLink, '', 1, sName);
+        CreateMediaItem(PodcastItem, sName, sLink, 'http://wonky.lostcut.net/icons/ok.png', 1, sName);
       }
     } 
     
@@ -863,6 +908,19 @@ void CreateLinks() {
     }
     
   } finally { VIDEO.Free; PLAYLIST.Free; }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Создание ссылок на фильм или сериал
+void SearchAndPlayVideoByKPid() {
+  string sData, sID;
+  
+  if (Trim(PodcastItem[mpiJsonInfo])!='') return;
+  
+  if (!HmsRegExMatch('kpid=(\\d+)', mpFilePath, sID)) return;
+  sData = HmsDownloadURL(gsAPIUrl+'videos?kpid='+sID, "Accept-Encoding: gzip, deflate", true);
+  HmsRegExMatch('^\\[(.*)\\]', sData, sData, 1, PCRE_SINGLELINE);
+  PodcastItem[mpiJsonInfo] = HmsUtf8Decode(sData);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -883,10 +941,13 @@ void GetLink() {
   } else if (HmsFileMediaType(mpFilePath)==mtVideo) {
     MediaResourceLink = mpFilePath;
 
-  } else if (LeftCopy(mpFilePath, 4)=='Info' ) {
+  } else if (LeftCopy(mpFilePath, 4)=='Info') {
     VideoPreview();
   
-  } else if (LeftCopy(mpFilePath, 4)=='-Fav' ) 
+  } else if (LeftCopy(mpFilePath, 4)=='kpid') {
+    SearchAndPlayVideoByKPid();
+    
+  } else if (LeftCopy(mpFilePath, 4)=='-Fav') 
     AddRemoveFavorites();
 }
 
@@ -920,6 +981,21 @@ void AddRemoveFavorites() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Пометка просмотренной серии
+void MarkViewed() {
+  string sMark, sSeason, sEpisode; THmsScriptMediaItem Item = PodcastItem;
+  // Если это не серия сериала - выходим
+  if (!HmsRegExMatch2('season=(\\d+).*?episode=(\\d+)', mpFilePath, sSeason, sEpisode)) return;
+  // Поиск родительской папки сериала (где есть информация о сериала в mpiJsonInfo)
+  while ((Trim(Item[mpiJsonInfo])=="") && (Item.ItemParent!=nil)) Item=Item.ItemParent;
+  if (Trim(Item[mpiJsonInfo])=="") return; // Если не найдена - выходим
+  sMark = 's'+sSeason+'e'+sEpisode+';';    // Номер сезона и серии
+  if (Pos(sMark, Item[mpiComment]) < 1) Item[mpiComment] += sMark; // Добавляем в комментарий
+  ItemMarkViewed(PodcastItem);
+  HmsDatabaseAutoSave(true);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 //                     Г Л А В Н А Я   П Р О Ц Е Д У Р А                     //
 {
   if (PodcastItem.IsFolder) {
@@ -938,6 +1014,9 @@ void AddRemoveFavorites() {
       mpFilePath = HmsJsonDecode(mpFilePath);
       GetLink();  
     }
+    
+    if ((Trim(MediaResourceLink)!='') && (Pos('--markonplay', mpPodcastParameters)>0)) 
+      MarkViewed();
   } 
 
 }

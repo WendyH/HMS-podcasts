@@ -1,4 +1,4 @@
-﻿// 2017.03.25
+﻿// 2017.04.04
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -10,7 +10,7 @@ string    gsUrlBase     = "http://hdkinoteatr.com";
 int       gnTotalItems  = 0; 
 TDateTime gStart        = Now;
 string    gsAPIUrl      = "http://api.lostcut.net/hdkinoteatr/";
-int       gnDefaultTime = 4000;
+int       gnDefaultTime = 6000;
 string    gsTVDBInfo    = "";
 bool gbUseSerialKPInfo  = false;
 ///////////////////////////////////////////////////////////////////////////////
@@ -62,6 +62,7 @@ THmsScriptMediaItem CreateFolder(THmsScriptMediaItem Parent, string sName, strin
   Item[mpiCreateDate ] = IncTime(gStart, 0, -gnTotalItems, 0, 0); gnTotalItems++;
   Item[mpiSeriesTitle] = mpSeriesTitle; // Наследуем название сериала (если есть)
   Item[mpiYear       ] = mpYear;        // Наследуем год сериала (если есть)
+  Item[mpiFolderSortOrder] = "-mpCreateDate";
   return Item;
 }
 
@@ -77,6 +78,7 @@ void CreateMoonwallkLinks(string sLink, string sKPID='') {
   }
   
   sData = HmsDownloadURL(gsAPIUrl+'series?url='+HmsHttpEncode(sLink)+'&kpid='+sKPID, "Accept-Encoding: gzip, deflate", true);
+  sData = HmsUtf8Decode(sData);
   PLAYLIST = TJsonObject.Create();
   try {
     PLAYLIST.LoadFromString(sData);
@@ -158,6 +160,7 @@ void CreateLinksOfVideo() {
   if (sData=='') {
     if (!HmsRegExMatch('.*/(\\d+)-', mpFilePath, sID)) return;
     sData = HmsDownloadURL(gsAPIUrl+'videos?id='+sID, "Accept-Encoding: gzip, deflate", true);
+    sData = HmsUtf8Decode(sData);
   }
   
   try {
@@ -187,7 +190,7 @@ void CreateLinksOfVideo() {
       }
       
     }
-
+    
     // Специальная папка добавления/удаления в избранное
     if (VIDEO.B['isserial'] && (Pos('--controlfavorites', mpPodcastParameters)>0)) {
       Item = HmsFindMediaFolder(Podcast.ItemID, 'favorites');
@@ -220,11 +223,21 @@ void CreateVideosList(string sParams='') {
   
   // Если нет ссылки - формируем ссылку для поиска названия
   if ((Trim(mpFilePath)=='') || HmsRegExMatch('search="(.*?)"', mpFilePath, mpTitle)) {
-    sParams = 'q='+HmsHttpEncode(HmsUtf8Encode(mpTitle));
+    switch(FolderItem.ItemParent[mpiFilePath]) {
+      case 'directors'   : { sParams='director=';    }
+      case 'actors'      : { sParams='actor=';       }
+      case 'scenarists'  : { sParams='scenarist=';   }
+      case 'producers'   : { sParams='producer=';    }
+      case 'composers'   : { sParams='composer=';    }
+      case 'translations': { sParams='translation='; }
+      default            : { sParams='q=';           }
+    }
+    sParams += HmsHttpEncode(HmsUtf8Encode(mpTitle));
   }
   
   // Получение данных и цикл создания ссылок на видео
   sData = HmsDownloadURL(gsAPIUrl+'videos?'+sParams, "Accept-Encoding: gzip, deflate", true);
+  sData = HmsUtf8Decode(sData);
   JSON  = TJsonObject.Create();
   try {
     JSON.LoadFromString(sData);
@@ -250,7 +263,7 @@ void CreateVideosList(string sParams='') {
         case "year" : { sGrp = sYear; }
         default     : { sGrp = "";    }
       }
-      if (Trim(sGrp)!="") Folder = FolderItem.AddFolder(sGrp);
+      if (Trim(sGrp)!="") Folder = CreateFolder(FolderItem, sGrp, sGrp);
       
       if (bNoFolders && !VIDEO.B['isserial']) {
         Item = CreateMediaItem(Folder, sName, sLink, sImg, nTime);
@@ -307,7 +320,7 @@ void CheckPodcastUpdate() {
       if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
         if (sData=='') continue;                                                     // Если не получилось загрузить, пропускаем
-        Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
+          Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
         Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
         Podcast[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
         HmsLogMessage(1, Podcast[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
@@ -315,7 +328,7 @@ void CheckPodcastUpdate() {
       }
     } 
   } finally { JSON.Free; if (bChanges) HmsDatabaseAutoSave(true); }
-} //Вызов в главной процедуре: if (Pos('--nocheckupdates', mpPodcastParameters) < 1) CheckPodcastUpdate();
+} //Вызов в главной процедуре: if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate();
 
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка актуальности версии функции GetLink_Moonwalk в скриптах
@@ -334,6 +347,7 @@ void CheckMoonwalkFunction() {
       JSON.LoadFromString(sData);
       sFuncNew = JSON.S['files\\GetLink_Moonwalk.cpp\\content'];
       if ((sFuncNew!='') && (Podcast[mpiMWVersion]!=JSON.S['updated_at'])) {
+        HmsRegExMatch(sPatternMoonwalkFunction, sFuncNew, sFuncNew, 1, PCRE_SINGLELINE);
         Podcast[550] = ReplaceStr(Podcast[550], sFuncOld, sFuncNew); // Заменяем старую функцию на новую
         Podcast[mpiMWVersion] = JSON.S['updated_at'];
         HmsLogMessage(2, Podcast[mpiTitle]+": Обновлена функция получения ссылки с moonwalk.cc!");
@@ -354,7 +368,7 @@ void CheckMoonwalkFunction() {
   } 
   FolderItem.DeleteChildItems();
 
-  if (Pos('--nocheckupdates'  , mpPodcastParameters)<1) CheckPodcastUpdate();
+  if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate(); // Проверка обновлений подкаста
   if (Pos('--noupdatemoonwalk', mpPodcastParameters)<1) CheckMoonwalkFunction();
  
   if      (Pos('/serial/', mpFilePath) > 0) CreateMoonwallkLinks(mpFilePath); // вариант перевода сериала

@@ -1,10 +1,11 @@
-﻿// 2017.03.25
+﻿// 2017.04.04
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
+THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
 string    gsUrlBase    = "http://hdkinoteatr.com"; 
 int       gnTotalItems = 0; 
 TDateTime gStart       = Now;
@@ -14,15 +15,23 @@ string    gsAPIUrl     = "http://api.lostcut.net/hdkinoteatr/";
 //                             Ф У Н К Ц И И                                 //
 
 ///////////////////////////////////////////////////////////////////////////////
+// Установка переменной Podcast: поиск родительской папки, содержащий скрипт
+THmsScriptMediaItem GetRoot() {
+  Podcast = FolderItem; // Начиная с текущего элемента, ищется создержащий срипт
+  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
+  return Podcast;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Создание папки или подкаста
-THmsScriptMediaItem CreateFolder(THmsScriptMediaItem Parent, string sName, string sLink, string sParams='', bool bForceFolder=false) {
+THmsScriptMediaItem CreateFolder(THmsScriptMediaItem Parent, string sName, string sLink, string sParams='', bool bForceFolder=false, bool bCreateStruct=false) {
   THmsScriptMediaItem Item = Parent.AddFolder(sLink, bForceFolder); // Создаём папку с указанной ссылкой
   Item[mpiTitle     ] = sName; // Присваиваем наименование
-  Item[mpiCreateDate] = DateTimeToStr(IncTime(gStart, 0, -gnTotalItems, 0, 0)); // Для обратной сортировки по дате создания
+  Item[mpiCreateDate] = IncTime(gStart,0,-gnTotalItems,0,0); gnTotalItems++;
   Item[mpiPodcastParameters] = sParams;
   Item[mpiFolderSortOrder  ] = "-mpCreateDate";
-  gnTotalItems++;              // Увеличиваем счетчик созданных элементов
-  return Item;                 // Возвращаем созданный объект
+  if (bCreateStruct) Item[570] = 2;
+  return Item;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -71,6 +80,11 @@ void CreateSearchFolder(THmsScriptMediaItem Parent, string sTitle) {
   gnTotalItems++;
   
   CreateDynamicItem(Folder, '"Набрать текст"', '-SearchCommands', sScript);
+  
+  CreateFolder(Folder, 'Режиссёры' , 'directors' , '', true);
+  CreateFolder(Folder, 'Актёры'    , 'actors'    , '', true);
+  CreateFolder(Folder, 'Сценаристы', 'scenarists', '', true);
+  CreateFolder(Folder, 'Продюсеры' , 'producers' , '', true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -103,7 +117,7 @@ void CreateCategories(THmsScriptMediaItem Parent, string sName, string sLink, st
     JARRAY = JSON.AsArray; if (JARRAY==nil) return;
     for (i=0; i<JARRAY.Length; i++) {
       VIDEO = JARRAY[i];
-      CreateFolder(Folder, VIDEO.S['name'], sLink+'='+VIDEO.S['id']);
+      CreateFolder(Folder, HmsHtmlToText(VIDEO.S['name'], 65001), sLink+'='+VIDEO.S['id']);
     }
   } finally { JSON.Free; }
 }
@@ -141,25 +155,21 @@ bool DeleteFolders() {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание списка сериалов
-void CreateSerials(THmsScriptMediaItem Parent, string sName, string sLink, string sParams='') {
-  string sData, sID, sKPID, sImg, sGrp, sPrevGrp=''; int i; TJsonObject JSON, VIDEO; TJsonArray JARRAY;
-  THmsScriptMediaItem Folder, Serial, Group;
+void CreateSerials() {
+  string sData, sName, sLink, sID, sKPID, sImg, sGrp, sPrevGrp=''; int i; TJsonObject JSON, VIDEO; TJsonArray JARRAY;
+  THmsScriptMediaItem Folder=FolderItem, Serial, Group;
   
-  Folder = CreateFolder(Parent, sName, sLink, sParams, true);
-  Folder[mpiFolderSortOrder] = "mpTitle";
-  
-  sData = HmsDownloadURL(gsAPIUrl+'videos?serials=1&limit=9000&ord=asc', "Accept-Encoding: gzip, deflate", true);
+  sData = HmsDownloadURL(gsAPIUrl+'videos?serials=1&limit=9000&ord=name', "Accept-Encoding: gzip, deflate", true);
   JSON  = TJsonObject.Create();
   try {
     JSON.LoadFromString(sData);
     JARRAY = JSON.AsArray; if (JARRAY==nil) return;
     for (i=0; i<JARRAY.Length; i++) {
       VIDEO = JARRAY[i];
-      sName = VIDEO.S['name'];
+      sName = HmsHtmlToText(VIDEO.S['name'], 65001);
       sID   = VIDEO.S['id'  ];
       sKPID = VIDEO.S['kpid'];
       sImg  = '';
-      sName = HmsJsonDecode(sName);
       if (Length(sKPID)>1) sImg = 'https://st.kp.yandex.net/images/film_iphone/iphone360_'+sKPID+'.jpg';
       sGrp  = GetGroupName(sName);
       if (sPrevGrp!=sGrp) {
@@ -180,18 +190,46 @@ void CreateSerials(THmsScriptMediaItem Parent, string sName, string sLink, strin
 ///////////////////////////////////////////////////////////////////////////////
 //                     Г Л А В Н А Я   П Р О Ц Е Д У Р А                     //
 {
-  if (!DeleteFolders()) return;
+  THmsScriptMediaItem Folder;
   
-  CreateFolder      (FolderItem, '00 Избранное'         , 'favorites'  , '', true);
-  CreateSearchFolder(FolderItem, '01 Поиск');
-  CreateFolder      (FolderItem, '02 Новинки фильмов'   , 'serials=0');
-  CreateSerials     (FolderItem, '03 Сериалы'           , 'serials');
-  CreateCategories  (FolderItem, '04 Категории'         , 'serials=0&limit=500&category');
-  CreateYears       (FolderItem, '05 По-годам'          , 'serials=0&limit=500&year');
-  CreateCategories  (FolderItem, '06 По-странам'        , 'serials=0&country', '--group=year');
-  CreateFolder      (FolderItem, '07 TOP250 IMDb'       , 'top=imdb');
-  CreateFolder      (FolderItem, '08 TOP250 Kinopoisk'  , 'top=kp'  );
-  CreateFolder      (FolderItem, '09 TOP250 HDKinoteatr', 'top=hd'  );
+  if (!DeleteFolders()) return;
+
+  if (FolderItem==Podcast) {
+    // Это корневая папка подкаста - создём структуру
+    CreateFolder      (FolderItem, '00 Избранное'         , 'favorites'  , '', true);
+    CreateSearchFolder(FolderItem, '01 Поиск');
+    CreateFolder      (FolderItem, '02 Последние поступления', 'serials=0');
+    CreateFolder      (FolderItem, '03 Сериалы'           , 'serials', '', true, true);
+    CreateCategories  (FolderItem, '04 Категории'         , 'serials=0&limit=500&category');
+    CreateYears       (FolderItem, '05 По-годам'          , 'serials=0&limit=500&year');
+    CreateCategories  (FolderItem, '06 По-странам'        , 'serials=0&country', '--group=year');
+    CreateFolder      (FolderItem, '07 TOP250 IMDb'       , 'top=imdb');
+    CreateFolder      (FolderItem, '08 TOP250 Kinopoisk'  , 'top=kp'  );
+    CreateFolder      (FolderItem, '09 TOP250 HDKinoteatr', 'top=hd'  );
+    
+    Folder = CreateFolder(FolderItem, '10 С рейтингом IMDb от 6.0', 'imdb>6', '', true);
+    CreateFolder    (Folder, '1 Последние поступления IMDb>6', 'serials=0&min_imdb=6');
+    CreateCategories(Folder, '2 Категории'      , 'serials=0&min_imdb=6&limit=500&category');
+    CreateYears     (Folder, '3 По-годам'       , 'serials=0&min_imdb=6&limit=500&year');
+    CreateCategories(Folder, '4 По-странам'     , 'serials=0&min_imdb=6&country', '--group=year');
+    
+    Folder = CreateFolder(FolderItem, '11 С рейтингом KP от 6.0', 'kp>6', '', true);
+    CreateFolder    (Folder, '1 Последние поступления KP>6', 'serials=0&min_kp=6');
+    CreateCategories(Folder, '2 Категории'      , 'serials=0&min_kp=6&limit=500&category');
+    CreateYears     (Folder, '3 По-годам'       , 'serials=0&min_kp=6&limit=500&year');
+    CreateCategories(Folder, '4 По-странам'     , 'serials=0&min_kp=6&country', '--group=year');
+    
+    Folder = CreateFolder(FolderItem, '12 С рейтингом HD от 6.0', 'hd>6', '', true);
+    CreateFolder    (Folder, '1 Последние поступления HD>6', 'serials=0&min_hd=6');
+    CreateCategories(Folder, '2 Категории'      , 'serials=0&min_hd=6&limit=500&category');
+    CreateYears     (Folder, '3 По-годам'       , 'serials=0&min_hd=6&limit=500&year');
+    CreateCategories(Folder, '4 По-странам'     , 'serials=0&min_hd=6&country', '--group=year');
+    
+  } else if (mpFilePath=='serials') {
+    // Создание списка сериалов - отдельно
+    CreateSerials();
+    
+  }
   
   HmsLogMessage(1, mpTitle+': Создано элементов - '+IntToStr(gnTotalItems));
 }
