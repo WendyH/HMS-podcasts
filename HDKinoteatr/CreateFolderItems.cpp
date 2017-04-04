@@ -320,7 +320,7 @@ void CheckPodcastUpdate() {
       if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
         if (sData=='') continue;                                                     // Если не получилось загрузить, пропускаем
-          Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
+        Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
         Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
         Podcast[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
         HmsLogMessage(1, Podcast[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
@@ -333,8 +333,8 @@ void CheckPodcastUpdate() {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка актуальности версии функции GetLink_Moonwalk в скриптах
 void CheckMoonwalkFunction() {
-  string sData, sFuncOld, sFuncNew; TJsonObject JSON;
-  int nTimePrev, nTimeNow, mpiTimestamp=100602, mpiMWVersion=100603; 
+  string sData, sFuncOld, sFuncNew; TJsonObject JSON; TDateTime UPDTIME;
+  int nTimePrev, nTimeNow, mpiTimestamp=100862, mpiMWVersion=100821; 
   string sPatternMoonwalkFunction = "(// Получение ссылки с moonwalk.cc.*?// Конец функции поулчения ссылки с moonwalk.cc)";
   
   // Если после последней проверки прошло меньше получаса - валим
