@@ -197,7 +197,8 @@ void CreateSerials() {
     // Это корневая папка подкаста - создём структуру
     CreateFolder      (FolderItem, '00 Избранное'         , 'favorites'  , '', true);
     CreateSearchFolder(FolderItem, '01 Поиск');
-    CreateFolder      (FolderItem, '02 Последние поступления', 'serials=0');
+    Folder=CreateFolder(FolderItem,'02 Последние поступления', 'serials=0');
+    Folder[mpiComment] = '--update';
     CreateFolder      (FolderItem, '03 Сериалы'           , 'serials', '', true, true);
     CreateCategories  (FolderItem, '04 Категории'         , 'serials=0&limit=500&category');
     CreateYears       (FolderItem, '05 По-годам'          , 'serials=0&limit=500&year');
