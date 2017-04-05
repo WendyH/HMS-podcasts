@@ -1,4 +1,4 @@
-﻿// 2017.04.04
+﻿// 2017.04.05
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -83,7 +83,6 @@ void CreateSearchFolder(THmsScriptMediaItem Parent, string sTitle) {
   
   CreateFolder(Folder, 'Режиссёры' , 'directors' , '', true);
   CreateFolder(Folder, 'Актёры'    , 'actors'    , '', true);
-  CreateFolder(Folder, 'Сценаристы', 'scenarists', '', true);
   CreateFolder(Folder, 'Продюсеры' , 'producers' , '', true);
 }
 
