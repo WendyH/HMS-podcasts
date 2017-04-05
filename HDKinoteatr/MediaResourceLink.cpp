@@ -13,8 +13,6 @@ TDateTime gStart        = Now;
 string    gsAPIUrl      = "http://api.lostcut.net/hdkinoteatr/";
 int       gnDefaultTime = 6000;
 bool      gbQualityLog  = false;
-string    gsTVDBInfo    = "";
-bool gbUseSerialKPInfo  = false;
 
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
@@ -538,62 +536,6 @@ void CreateInfoItem(string sKey, string sVal) {
   THmsScriptMediaItem Item; sVal = Trim(sVal);
   if (sVal=="") return;
   CreateMediaItem(PodcastItem, sKey+': '+sVal, 'Info'+sVal, 'http://wonky.lostcut.net/vids/info.jpg', 7);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Получение информации с Kinopoisk о сериале
-void LoadKPSerialInfo() {
-  string sID, sData, sHtml, sName, sVal, sHeaders, sYear; int nEpisode, nSeason, n; TRegExpr RE;
-  if (gsTVDBInfo!='') return;
-  sID = Trim(PodcastItem[100500]); // Получаем запомненный kinopoisk ID
-
-  if (sID=='') HmsRegExMatch('/images/(film|film_big)/(\\d+)', mpThumbnail, sID, 2); // Или пытаемся его получить из картинки
-  if (sID=='') HmsRegExMatch('/iphone360_(\\d+)', mpThumbnail, sID);
-  if ((sID!='') && (sID!='0')) {
-    // Проверяем, была ли уже загружена информация для такого количества серий
-    if ((PodcastItem[100508]!='') && (PodcastItem[100508]==PodcastItem[100509])) {
-      gsTVDBInfo = PodcastItem[100507];
-      return;
-    }
-    sHeaders = 'Referer: https://kinopoisk.ru/\r\n'+
-               'Accept-Encoding: gzip, deflate\r\n'+
-               'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:13.0) Gecko/20100101 Firefox/13.0\r\n';
-    sHtml = HmsDownloadURL("https://www.kinopoisk.ru/film/"+sID+"/episodes/", sHeaders, true);
-    if (HmsRegExMatch2('<td[^>]+class="news">([^<]+),\\s+(\\d{4})', sHtml, sName, sYear)) {
-      // Если получили оригинальное название сериала - пробуем загрузить инфу с картинками
-      sName = ReplaceStr(sName, ' ', '_');
-      gsTVDBInfo = HmsUtf8Decode(HmsDownloadURL('http://wonky.lostcut.net/tvdb.php?n='+sName+'&y='+sYear, sHeaders, true));
-    }
-    if (gsTVDBInfo=='') {
-      RE = TRegExpr.Create('(<h[^>]+moviename-big.*?)</h', PCRE_SINGLELINE);
-      nSeason  = 1;
-      nEpisode = 1;
-      if (RE.Search(sHtml)) do {
-        sName = HmsHtmlToText(re.Match());
-        if (HmsRegExMatch("Сезон\\s*?(\\d+)", sName, sVal)) { nSeason=StrToInt(sVal); nEpisode=1; continue; }
-        gsTVDBInfo += 's'+Str(nSeason)+'e'+Str(nEpisode)+'=;t='+sName+'|';
-        nEpisode++;
-      } while (RE.SearchAgain());
-    }
-    if (gsTVDBInfo=='') gsTVDBInfo = '-';
-  }
-  PodcastItem[100507] = gsTVDBInfo;          // Запоминаем инфу 
-  PodcastItem[100509] = PodcastItem[100508]; // для такого количества серий
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Получение реального названия и картинки для серии сериала из gsTVDBInfo
-void SetSerialInfo(THmsScriptMediaItem Item, int nSeason, int nEpisode) {
-  string sName, sImg;
-  if (!gbUseSerialKPInfo ) return; if (gsTVDBInfo=='') LoadKPSerialInfo();
-  if (HmsRegExMatch2('s'+Str(nSeason)+'e'+Str(nEpisode)+'=(.*?);t=(.*?)\\|', gsTVDBInfo, sImg, sName)) {
-    if (sImg !="") Item[mpiThumbnail] = sImg;
-    if (sName!="") Item[mpiTitle    ] = Format("%.2d %s", [nEpisode, sName]);
-  } else sName = Item[mpiTitle];
-  Item[mpiSeriesEpisodeTitle] = sName;
-  Item[mpiSeriesEpisodeNo   ] = nEpisode;
-  Item[mpiSeriesSeasonNo    ] = nSeason;
-  Item[mpiSeriesTitle       ] = PodcastItem[mpiSeriesTitle];
 }
 
 ///////////////////////////////////////////////////////////////////////////////

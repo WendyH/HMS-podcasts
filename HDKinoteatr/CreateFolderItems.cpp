@@ -11,8 +11,7 @@ int       gnTotalItems  = 0;
 TDateTime gStart        = Now;
 string    gsAPIUrl      = "http://api.lostcut.net/hdkinoteatr/";
 int       gnDefaultTime = 6000;
-string    gsTVDBInfo    = "";
-bool gbUseSerialKPInfo  = false;
+
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
 
