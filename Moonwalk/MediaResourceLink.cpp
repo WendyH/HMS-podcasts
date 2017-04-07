@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.03.29
+﻿// VERSION = 2017.04.07
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -97,7 +97,6 @@ void HDSLink(string sLink, string sQual = '') {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с moonwalk.cc
 void GetLink_Moonwalk(string sLink) {
   string sHtml, sData, sPage, sPost, sManifest, sVer, sSec, sQual, sVal, sServ, sRet, sCookie, sVar;
@@ -155,6 +154,10 @@ void GetLink_Moonwalk(string sLink) {
   sData = sHtml;
   while(HmsRegExMatch3('.(post_method\\.(\\w+)\\s*=\\s*(\\w+).*)', sData, sData, sVar, sVal)) {
     if (HmsRegExMatch('var\\s'+sVal+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal))
+      sPost += '&'+sVar+'='+sVal;
+  }
+  sData = sHtml;
+  while(HmsRegExMatch3(".post_method\\.(\\w+)\\s*=\\s*'(.*?)'(.*)", sData, sVar, sVal, sData)) {
       sPost += '&'+sVar+'='+sVal;
   }
   HmsRegExMatch('//(.*?)/', sLink, sServ);

@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.03.30
+﻿// VERSION = 2017.04.07
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -372,13 +372,12 @@ void CheckPodcastUpdate() {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка актуальности версии функции GetLink_Moonwalk в скриптах
 void CheckMoonwalkFunction() {
-  string sData, sFuncOld, sFuncNew; THmsScriptMediaItem Podcast=FolderItem; 
-  int nTimePrev, nTimeNow, mpiTimestamp=100602, mpiMWVersion=100603; TJsonObject JSON;
+  string sData, sFuncOld, sFuncNew; TJsonObject JSON; TDateTime UPDTIME;
+  int nTimePrev, nTimeNow, mpiTimestamp=100862, mpiMWVersion=100821; 
   string sPatternMoonwalkFunction = "(// Получение ссылки с moonwalk.cc.*?// Конец функции поулчения ссылки с moonwalk.cc)";
-
-  if ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast = Podcast.ItemParent; // Ищем скрипт получения ссылки на поток
+  
   // Если после последней проверки прошло меньше получаса - валим
-  if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 1800)) return;
+  if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 3600)) return; // раз в час
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   if (HmsRegExMatch(sPatternMoonwalkFunction, Podcast[550], sFuncOld, 1, PCRE_SINGLELINE)) {
     sData = HmsUtf8Decode(HmsDownloadURL("https://api.github.com/gists/3092dc755ad4a6c412e2fcd17c28d096", "Accept-Encoding: gzip, deflate", true));
@@ -386,8 +385,8 @@ void CheckMoonwalkFunction() {
     try {
       JSON.LoadFromString(sData);
       sFuncNew = JSON.S['files\\GetLink_Moonwalk.cpp\\content'];
-      HmsRegExMatch(sPatternMoonwalkFunction, sFuncNew, sFuncNew, 1, PCRE_SINGLELINE);
       if ((sFuncNew!='') && (Podcast[mpiMWVersion]!=JSON.S['updated_at'])) {
+        HmsRegExMatch(sPatternMoonwalkFunction, sFuncNew, sFuncNew, 1, PCRE_SINGLELINE);
         Podcast[550] = ReplaceStr(Podcast[550], sFuncOld, sFuncNew); // Заменяем старую функцию на новую
         Podcast[mpiMWVersion] = JSON.S['updated_at'];
         HmsLogMessage(2, Podcast[mpiTitle]+": Обновлена функция получения ссылки с moonwalk.cc!");
