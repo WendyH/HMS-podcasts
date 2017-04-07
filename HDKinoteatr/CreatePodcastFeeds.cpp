@@ -1,4 +1,4 @@
-﻿// 2017.04.05
+﻿// 2017.04.07
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -110,13 +110,14 @@ void CreateCategories(THmsScriptMediaItem Parent, string sName, string sLink, st
   if (Pos('serials=1', sLink)>0) sRes += '?serials=1';
   
   sData = HmsDownloadURL(gsAPIUrl+sRes, "Accept-Encoding: gzip, deflate", true);
+  sData = HmsUtf8Decode(sData);
   JSON  = TJsonObject.Create();
   try {
     JSON.LoadFromString(sData);
     JARRAY = JSON.AsArray; if (JARRAY==nil) return;
     for (i=0; i<JARRAY.Length; i++) {
       VIDEO = JARRAY[i];
-      CreateFolder(Folder, HmsHtmlToText(VIDEO.S['name'], 65001), sLink+'='+VIDEO.S['id']);
+      CreateFolder(Folder, VIDEO.S['name'], sLink+'='+VIDEO.S['id']);
     }
   } finally { JSON.Free; }
 }
@@ -159,13 +160,14 @@ void CreateSerials() {
   THmsScriptMediaItem Folder=FolderItem, Serial, Group;
   
   sData = HmsDownloadURL(gsAPIUrl+'videos?serials=1&limit=9000&ord=name', "Accept-Encoding: gzip, deflate", true);
+  sData = HmsUtf8Decode(sData);
   JSON  = TJsonObject.Create();
   try {
     JSON.LoadFromString(sData);
     JARRAY = JSON.AsArray; if (JARRAY==nil) return;
     for (i=0; i<JARRAY.Length; i++) {
       VIDEO = JARRAY[i];
-      sName = HmsHtmlToText(VIDEO.S['name'], 65001);
+      sName = VIDEO.S['name'];
       sID   = VIDEO.S['id'  ];
       sKPID = VIDEO.S['kpid'];
       sImg  = '';
@@ -200,7 +202,7 @@ void CreateSerials() {
     Folder=CreateFolder(FolderItem,'02 Последние поступления', 'serials=0');
     Folder[mpiComment] = '--update';
     CreateFolder      (FolderItem, '03 Сериалы'           , 'serials', '', true, true);
-    CreateCategories  (FolderItem, '04 Категории'         , 'serials=0&limit=500&category');
+    CreateCategories  (FolderItem, '04 Категории'         , 'serials=0&limit=500&category', '--group=year');
     CreateYears       (FolderItem, '05 По-годам'          , 'serials=0&limit=500&year');
     CreateCategories  (FolderItem, '06 По-странам'        , 'serials=0&country', '--group=year');
     CreateFolder      (FolderItem, '07 TOP250 IMDb'       , 'top=imdb');
