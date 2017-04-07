@@ -1,4 +1,4 @@
-﻿// 2017.04.05
+﻿// 2017.04.07
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -83,6 +83,10 @@ void GetLink_Moonwalk(string sLink) {
   sData = sHtml;
   while(HmsRegExMatch3('.(post_method\\.(\\w+)\\s*=\\s*(\\w+).*)', sData, sData, sVar, sVal)) {
     if (HmsRegExMatch('var\\s'+sVal+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal))
+      sPost += '&'+sVar+'='+sVal;
+  }
+  sData = sHtml;
+  while(HmsRegExMatch3(".post_method\\.(\\w+)\\s*=\\s*'(.*?)'(.*)", sData, sVar, sVal, sData)) {
       sPost += '&'+sVar+'='+sVal;
   }
   HmsRegExMatch('//(.*?)/', sLink, sServ);
@@ -502,7 +506,7 @@ THmsScriptMediaItem CreateMediaItem(THmsScriptMediaItem Folder, string sTitle, s
   Item[mpiThumbnail ] = sImg;
   Item[mpiCreateDate] = VarToStr(IncTime(gStart,0,-gnTotalItems,0,0));
   Item[mpiTimeLength] = HmsTimeFormat(nTime)+'.000';
-  if (HmsRegExMatch('/embed/([\\w-_]+)', sLink, sImg))
+  if (HmsRegExMatch('(?:/embed/|v=)([\\w-_]+)', sLink, sImg))
     Item[mpiThumbnail ] = 'http://img.youtube.com/vi/'+sImg+'/0.jpg';
   gnTotalItems++;
   return Item;
@@ -717,9 +721,13 @@ void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder)
       if (sName=='Фильм') sName = mpTitle;
       if ((Pos('/serial/', sLink)>0) && (Pos('episode', sLink)<1))
         CreateFolder(Folder, sName, sLink, sImg);
-      else if (Pos('youtu', sLink) > 0)
-        CreateMediaItem(Folder, sName, sLink, sImg, 230);
-      else {
+      else if (Pos('youtu', sLink) > 0) {
+        
+        if (Pos('Трейлер', sName)>0)
+          CreateMediaItem(Folder, sName, sLink, sImg, 230);
+        else
+          CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
+      } else {
         // Форматируем номер в два знака
         if (sName!=mpTitle) {
           if (HmsRegExMatch("^(\\d+)", sName, sVal)) 

@@ -1,4 +1,4 @@
-﻿// 2017.04.05
+﻿// 2017.04.07
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -41,6 +41,8 @@ THmsScriptMediaItem CreateMediaItem(THmsScriptMediaItem Folder, string sTitle, s
   Item[mpiThumbnail ] = sImg;
   Item[mpiCreateDate] = IncTime(gStart,0,-gnTotalItems,0,0); gnTotalItems++;
   Item[mpiTimeLength] = HmsTimeFormat(nTime)+'.000';
+  if (HmsRegExMatch('(?:/embed/|v=)([\\w-_]+)', sLink, sImg))
+    Item[mpiThumbnail] = 'http://img.youtube.com/vi/'+sImg+'/1.jpg';
   return Item;
 }
 
@@ -116,20 +118,29 @@ void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder)
       sLink = JOBJECT.S["file"   ];
       sName = JOBJECT.S["comment"];
       sImg  = JOBJECT.S["image"  ]; if (sImg=='') sImg = mpThumbnail;
-      if (sName=='Фильм') sName = mpTitle;
+
+      // Форматируем номер в два знака
+      if (sName=='Фильм') 
+        sName = mpTitle;
+      else if (HmsRegExMatch("^(\\d+)", sName, sVal)) 
+        sName = ReplaceStr(sName, sVal, Trim(Format(sFmt, [StrToInt(sVal), ""])));
+      else
+        sName = Format(sFmt, [i+1, sName]);
+
       if ((Pos('/serial/', sLink)>0) && (Pos('episode', sLink)<1))
         CreateFolder(Folder, sName, sLink, sImg);
-      else if (Pos('youtu', sLink) > 0)
-        CreateMediaItem(Folder, sName, sLink, sImg, 230);
-      else {
-        // Форматируем номер в два знака
-        if (HmsRegExMatch("^(\\d+)", sName, sVal)) 
-          sName = ReplaceStr(sName, sVal, Trim(Format(sFmt, [StrToInt(sVal), ""])));
+
+      else if (Pos('youtu', sLink) > 0) {
+        if (Pos('Трейлер', sName)>0)
+          CreateMediaItem(Folder, sName, sLink, sImg, 230);
         else
-          sName = Format(sFmt, [i+1, sName]);
+          CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
+
+      } else {
         Item = CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
         FillVideoInfo(Item);
       }
+
     }
   }
 }
@@ -197,7 +208,7 @@ void CreateLinksOfVideo() {
         bool bExist = HmsFindMediaFolder(Item.ItemID, mpFilePath) != nil;
         if (bExist) { sName = "Удалить из избранного"; sLink = "-FavDel="+FolderItem.ItemParent.ItemID+";"+mpFilePath; }
         else        { sName = "Добавить в избранное" ; sLink = "-FavAdd="+FolderItem.ItemParent.ItemID+";"+mpFilePath; }
-        CreateMediaItem(FolderItem, sName, sLink, '', 1, sName);
+        CreateMediaItem(FolderItem, sName, sLink, 'http://wonky.lostcut.net/icons/ok.png', 1, sName);
       }
     } 
     
