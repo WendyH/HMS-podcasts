@@ -338,9 +338,9 @@ void CheckPodcastUpdate() {
   THmsScriptMediaItem Podcast=FolderItem; TJsonObject JSON, JFILE; TJsonArray JARRAY;
   string sData, sName, sLang, sExt, sMsg; int i, mpiTimestamp=100602, mpiSHA, mpiScript; bool bChanges=false;
   
-  if ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast = Podcast.ItemParent; // Ищем скрипт получения ссылки на поток
+  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast = Podcast.ItemParent; // Ищем скрипт получения ссылки на поток
   // Если после последней проверки прошло меньше получаса - валим
-  if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 1800)) return;
+  if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   sData = HmsDownloadURL('https://api.github.com/repos/WendyH/HMS-podcasts/contents/Moonwalk', "Accept-Encoding: gzip, deflate", true);
   JSON  = TJsonObject.Create();
@@ -377,7 +377,7 @@ void CheckMoonwalkFunction() {
   string sPatternMoonwalkFunction = "(// Получение ссылки с moonwalk.cc.*?// Конец функции поулчения ссылки с moonwalk.cc)";
   
   // Если после последней проверки прошло меньше получаса - валим
-  if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 3600)) return; // раз в час
+  while ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 3600)) return; // раз в час
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   if (HmsRegExMatch(sPatternMoonwalkFunction, Podcast[550], sFuncOld, 1, PCRE_SINGLELINE)) {
     sData = HmsUtf8Decode(HmsDownloadURL("https://api.github.com/gists/3092dc755ad4a6c412e2fcd17c28d096", "Accept-Encoding: gzip, deflate", true));
