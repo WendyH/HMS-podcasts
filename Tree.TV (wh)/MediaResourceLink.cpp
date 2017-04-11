@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.03.25
+﻿// VERSION = 2017.04.11
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 
@@ -265,35 +265,38 @@ void GetLink_TreeTV() {
 
   if (!HmsRegExMatch('/player/(\\d+)', mpFilePath, sID)) return;
 
-  // Загружаем страницу с фильмом, где устанавливаются кукисы UserEnter и key (они важны!)
-  sHtml = HmsDownloadURL('http://tree.tv/player/'+sId+'/1', 'Referer: '+sHeaders, true);
-  // Подтверждение своего Fingerprint (значения mycook в куках)
-  sPost = HmsDownloadURL("http://wonky.lostcut.net/fingerprint.php");
-  HmsRegExMatch('result=(.*?)&', sPost, sVal);
-  sHeaders += 'Cookie: mycook='+sVal+'\r\n';
-  sData = HmsSendRequestEx('tree.tv', '/film/index/imprint', 'POST', 'application/x-www-form-urlencoded', sHeaders, sPost, 80, 0x10, '', true);
-  // Получения и вычисления значений g, p, n через запросы к /guard
-  sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key=2", 80, 0x10, '', true);
-  if (HmsRegExMatch('"g":(\\d+)', sData, sVal)) g = StrToInt(sVal);
-  if (HmsRegExMatch('"p":(\\d+)', sData, sVal)) p = StrToInt(sVal);
-  sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key="+Str(g % p), 80, 0x10, '', true);
-  if (HmsRegExMatch('"s_key":(\\d+)', sData, sVal)) n = StrToInt(sVal);
-  if (HmsRegExMatch('"p":(\\d+)'    , sData, sVal)) p = StrToInt(sVal);
-  sData = HmsSendRequestEx('player.tree.tv', '/guard/guard/', 'POST', 'application/x-www-form-urlencoded', sHeaders, 'file='+sID+'&source=1&skc='+Str(n % p), 80, 0x10, sRet, true);
-  
-  HmsRegExMatch('({[^}]+"point"\\s*?:\\s*?"'+sID+'".*?})', sData, sData, 1, PCRE_SINGLELINE);
-  if (!HmsRegExMatch('"src"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
-    HmsLogMessage(2, "Не удалось получить ссылку на медиа-поток Tree-TV.");
-    return;
-  }
-  HmsDownloadURL('http://api.tree.tv/getreklama?_='+VarToStr(DateTimeToTimeStamp1970(Now, true)), sHeaders, true);
-  
+  sData = HmsDownloadURL('http://wonky.lostcut.net/treetv.php?id='+sId, 'Referer: '+sHeaders, true);
+  sData = ReplaceStr(sData, '\xEF\xBB\xBF', ''); // Remove BOM
+  //
+  //// Загружаем страницу с фильмом, где устанавливаются кукисы UserEnter и key (они важны!)
+  //sHtml = HmsDownloadURL('http://tree.tv/player/'+sId+'/1', 'Referer: '+sHeaders, true);
+  //// Подтверждение своего Fingerprint (значения mycook в куках)
+  //sPost = HmsDownloadURL("http://wonky.lostcut.net/fingerprint.php");
+  //HmsRegExMatch('result=(.*?)&', sPost, sVal);
+  //sHeaders += 'Cookie: mycook='+sVal+'\r\n';
+  //sData = HmsSendRequestEx('tree.tv', '/film/index/imprint', 'POST', 'application/x-www-form-urlencoded', sHeaders, sPost, 80, 0x10, '', true);
+  //// Получения и вычисления значений g, p, n через запросы к /guard
+  //sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key=8", 80, 0x10, '', true);
+  //if (HmsRegExMatch('"g":(\\d+)', sData, sVal)) g = StrToInt(sVal);
+  //if (HmsRegExMatch('"p":(\\d+)', sData, sVal)) p = StrToInt(sVal);
+  //sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key="+Str(g % p), 80, 0x10, '', true);
+  //if (HmsRegExMatch('"s_key":(\\d+)', sData, sVal)) n = StrToInt(sVal);
+  //if (HmsRegExMatch('"p":(\\d+)'    , sData, sVal)) p = StrToInt(sVal);
+  //sData = HmsSendRequestEx('player.tree.tv', '/guard/guard/', 'POST', 'application/x-www-form-urlencoded', sHeaders, 'file='+sID+'&source=1&skc='+Str(n % p), 80, 0x10, sRet, true);
+  //
+  //HmsRegExMatch('({[^}]+"point"\\s*?:\\s*?"'+sID+'".*?})', sData, sData, 1, PCRE_SINGLELINE);
+  //if (!HmsRegExMatch('"src"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
+  //  HmsLogMessage(2, "Не удалось получить ссылку на медиа-поток Tree-TV.");
+  //  return;
+  //}
+  //HmsDownloadURL('http://api.tree.tv/getreklama?_='+VarToStr(DateTimeToTimeStamp1970(Now, true)), sHeaders, true);
+  //
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
   
   bool bLogQual = HmsRegExMatch('--logqual', mpPodcastParameters, '');
-  
-  HmsRegExMatch('id=(\\w+)', sLink, sID);
-  sData = HmsSendRequestEx('player.tree.tv', '/guard/playlist/?id='+sID, 'POST', 'application/x-www-form-urlencoded', sHeaders, '', 80, 0x10, '', true);
+  //
+  //HmsRegExMatch('id=(\\w+)', sLink, sID);
+  //sData = HmsSendRequestEx('player.tree.tv', '/guard/playlist/?id='+sID, 'POST', 'application/x-www-form-urlencoded', sHeaders, '', 80, 0x10, '', true);
 
   sAvalQual = "Доступное качество: ";
   // Еслии указано качество - выбираем из плейлиста соответствующий плейлист
