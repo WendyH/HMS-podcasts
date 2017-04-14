@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.03.30
+﻿// VERSION = 2017.04.14
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -85,7 +85,7 @@ THmsScriptMediaItem CreateItem(THmsScriptMediaItem Parent, char sTitle='', char 
 
   Folder = CreateItem(FolderItem, '00. Избранное');
   CreateSearchFolder (FolderItem, '01. Поиск');
-  Folder = CreateItem(FolderItem, '02. Новинки фильмов', '/moonwalk/search_as?search_for=film');
+  Folder = CreateItem(FolderItem, '02. Новинки фильмов', '/moonwalk/search_as?sq=&kinopoisk_id=&search_for=film&search_year=updates&commit=%D0%9D%D0%B0%D0%B9%D1%82%D0%B8');
   Folder[mpiPodcastParameters] = '--maxpages=4 --maxingroup=160';
   Folder[mpiComment          ] = '--update';
   
