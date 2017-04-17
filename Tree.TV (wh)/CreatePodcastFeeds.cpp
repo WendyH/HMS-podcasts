@@ -1,4 +1,6 @@
-﻿// VERSION = 2017.03.19
+﻿// VERSION = 2017.04.18
+#define mpiFingerPrint 100244 // Идентификатор для хранения отпечатка
+
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 string gsUrlBase="http://tree.tv"; int gnItemsAdded=0; TDateTime gTimeStart=Now;
@@ -195,7 +197,7 @@ bool CheckForSure() {
   int nAnsw; string sMsg;
   
   sMsg = 'ПЕРЕСОЗДАНИЕ СТРУКТУРЫ ПОДКАСТА.\n\n'+
-         'Удалить существующую структуру, очистить ссылки???\n\n'+
+         'Пересоздать структуру подкаста заново (все разделы)???\n\n'+
          '"Да"  - будут удалены все вложенные папки и ссылки. Структура будет создана заного.\n'+
          '"Нет" - будет создана структура поверх существующих ссылок.\n'+
          '"Отмена" - не пересоздавать структуру.\n';
@@ -213,9 +215,15 @@ bool CheckForSure() {
 //                      Г Л А В Н А Я   П Р О Ц Е Д У Р А                    //
 // ----------------------------------------------------------------------------
 {
-  if (!CheckForSure()) return; // Удаление существующих ссылок
+  string sFingerPrint = Trim(FolderItem[mpiFingerPrint]);
+  if (HmsInputDialog("Отпечаток (Fingerprint)", "Введите текст", sFingerPrint, true)) {
+    FolderItem[mpiFingerPrint] = sFingerPrint;
 
-  CreateStructure(); // Создание структуры подкаста
+  } else {
+    if (!CheckForSure()) return; // Удаление существующих ссылок
+    CreateStructure(); // Создание структуры подкаста
+    HmsLogMessage(1, mpTitle+': Создано ссылок - '+IntToStr(gnItemsAdded));
 
-  HmsLogMessage(1, mpTitle+': Создано ссылок - '+IntToStr(gnItemsAdded));
+  }
+
 }

@@ -1,4 +1,6 @@
-﻿// VERSION = 2017.04.11
+﻿// VERSION = 2017.04.18
+#define mpiFingerPrint 100244 // Идентификатор для хранения отпечатка
+
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 
@@ -255,48 +257,58 @@ void CreareLinksGroup(THmsScriptMediaItem Folder, string sData, string sImg) {
 void GetLink_TreeTV() {
   string sID, sQual, sData, sLink, sHtml, sHeaders, sPost, sRet, sHeight, sAvalQual, sVal; 
   int g, p, n, nMinPriority=99, nPriority, nHeight, nSelectedHeight=0; TRegExpr RE; TStringList LIST;
+  THmsScriptMediaItem Podcast = PodcastItem;
   
-  sHeaders = mpFilePath+'\r\n'+
-             'X-Requested-With: XMLHttpRequest\r\n'+
-             'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36\r\n'+
-             'Accept-Encoding: identity\r\n'+
-             'Cookie: test=1;\r\n'+
-             'Origin: http://player.tree.tv\r\n';
-
   if (!HmsRegExMatch('/player/(\\d+)', mpFilePath, sID)) return;
+  
+  while ((Trim(Podcast[mpiFingerPrint])=="") && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
+  
+  sPost = Trim(Podcast[mpiFingerPrint]);
+  if (sPost=="") {
+    HmsLogMessage(2, "Для работы подкаста Tree.TV необходимо получить отпечаток на https://hms.lostcut.net/tree.tv/");
+    return;
+  }
 
-  sData = HmsDownloadURL('http://wonky.lostcut.net/treetv.php?id='+sId, 'Referer: '+sHeaders, true);
-  sData = ReplaceStr(sData, '\xEF\xBB\xBF', ''); // Remove BOM
-  //
-  //// Загружаем страницу с фильмом, где устанавливаются кукисы UserEnter и key (они важны!)
-  //sHtml = HmsDownloadURL('http://tree.tv/player/'+sId+'/1', 'Referer: '+sHeaders, true);
-  //// Подтверждение своего Fingerprint (значения mycook в куках)
-  //sPost = HmsDownloadURL("http://wonky.lostcut.net/fingerprint.php");
-  //HmsRegExMatch('result=(.*?)&', sPost, sVal);
-  //sHeaders += 'Cookie: mycook='+sVal+'\r\n';
-  //sData = HmsSendRequestEx('tree.tv', '/film/index/imprint', 'POST', 'application/x-www-form-urlencoded', sHeaders, sPost, 80, 0x10, '', true);
-  //// Получения и вычисления значений g, p, n через запросы к /guard
-  //sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key=8", 80, 0x10, '', true);
-  //if (HmsRegExMatch('"g":(\\d+)', sData, sVal)) g = StrToInt(sVal);
-  //if (HmsRegExMatch('"p":(\\d+)', sData, sVal)) p = StrToInt(sVal);
-  //sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key="+Str(g % p), 80, 0x10, '', true);
-  //if (HmsRegExMatch('"s_key":(\\d+)', sData, sVal)) n = StrToInt(sVal);
-  //if (HmsRegExMatch('"p":(\\d+)'    , sData, sVal)) p = StrToInt(sVal);
-  //sData = HmsSendRequestEx('player.tree.tv', '/guard/guard/', 'POST', 'application/x-www-form-urlencoded', sHeaders, 'file='+sID+'&source=1&skc='+Str(n % p), 80, 0x10, sRet, true);
-  //
-  //HmsRegExMatch('({[^}]+"point"\\s*?:\\s*?"'+sID+'".*?})', sData, sData, 1, PCRE_SINGLELINE);
-  //if (!HmsRegExMatch('"src"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
-  //  HmsLogMessage(2, "Не удалось получить ссылку на медиа-поток Tree-TV.");
-  //  return;
-  //}
-  //HmsDownloadURL('http://api.tree.tv/getreklama?_='+VarToStr(DateTimeToTimeStamp1970(Now, true)), sHeaders, true);
-  //
+  sHeaders = mpFilePath+'\r\n'+
+             'Cookie: invisible=1;\r\n'+
+             'Accept-Encoding: identity\r\n'+
+             'Accept: */*\r\n';
+  if (HmsRegExMatch('user_agent.*?value%5D=(.*?)&', sPost, sVal)) sHeaders += 'User-Agent: '+HmsHttpDecode(sVal)+'\r\n';
+  
+  // Загружаем страницу с фильмом, где устанавливаются кукисы UserEnter и key (они важны!)
+  sHtml = HmsDownloadURL('http://tree.tv/player/'+sId+'/1?_='+Str(Random), 'Referer: '+sHeaders, true);
+  // Подтверждение своего Fingerprint (значения mycook в куках)
+  HmsRegExMatch('result=(.*?)&', sPost, sVal);
+  sHeaders += 'Cookie: mycook='+sVal+'\r\n';
+  sData = HmsSendRequestEx('tree.tv', '/film/index/imprint', 'POST', 'application/x-www-form-urlencoded', sHeaders, sPost, 80, 0x00, '', true);
+  // Получения и вычисления значений g, p, n через запросы к /guard
+  sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key=3", 80, 0x10, '', true);
+  if (HmsRegExMatch('"g":(\\d+)', sData, sVal)) g = StrToInt(sVal);
+  if (HmsRegExMatch('"p":(\\d+)', sData, sVal)) p = StrToInt(sVal);
+  else { 
+    HmsLogMessage(2, "Видимо, на Tree.TV сменилась защита. Сообщите об этом автору подкаста на форуме."); 
+    return;
+  }
+  sData = HmsSendRequestEx('player.tree.tv', '/guard', 'POST', 'application/x-www-form-urlencoded', sHeaders, "key="+Str(g % p), 80, 0x10, '', true);
+  if (HmsRegExMatch('"s_key":(\\d+)', sData, sVal)) n = StrToInt(sVal);
+  if (HmsRegExMatch('"p":(\\d+)'    , sData, sVal)) p = StrToInt(sVal);
+  sData = HmsSendRequestEx('player.tree.tv', '/guard/guard/', 'POST', 'application/x-www-form-urlencoded', sHeaders, 'file='+sID+'&source=1&skc='+Str(n % p), 80, 0x10, sRet, true);
+  
+  HmsRegExMatch('({[^}]+"point"\\s*?:\\s*?"'+sID+'".*?})', sData, sData, 1, PCRE_SINGLELINE);
+  if (!HmsRegExMatch('"src"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
+    HmsLogMessage(2, "Не удалось получить ссылку на медиа-поток Tree-TV.");
+    return;
+  }
+  
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
   
   bool bLogQual = HmsRegExMatch('--logqual', mpPodcastParameters, '');
-  //
-  //HmsRegExMatch('id=(\\w+)', sLink, sID);
-  //sData = HmsSendRequestEx('player.tree.tv', '/guard/playlist/?id='+sID, 'POST', 'application/x-www-form-urlencoded', sHeaders, '', 80, 0x10, '', true);
+  
+  sHeaders = ReplaceStr(sHeaders, mpFilePath, "http://player.tree.tv/?file="+sID+"&source=1&user=false");
+  //sData = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
+
+  HmsRegExMatch('id=(\\w+)', sLink, sID);
+  sData = HmsSendRequestEx('player.tree.tv', '/guard/playlist/?id='+sID, 'GET', '', sHeaders, '', 80, 0x10, '', true);
 
   sAvalQual = "Доступное качество: ";
   // Еслии указано качество - выбираем из плейлиста соответствующий плейлист
