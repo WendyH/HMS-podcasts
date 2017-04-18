@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.04.18
+﻿// VERSION = 2017.04.18 / 2
 #define mpiFingerPrint 100244 // Идентификатор для хранения отпечатка
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -272,11 +272,14 @@ void GetLink_TreeTV() {
   sHeaders = mpFilePath+'\r\n'+
              'Cookie: invisible=1;\r\n'+
              'Accept-Encoding: identity\r\n'+
+             'X-Requested-With: XMLHttpRequest\r\n'+
+             'Origin: http://player.tree.tv\r\n'+
              'Accept: */*\r\n';
   if (HmsRegExMatch('user_agent.*?value%5D=(.*?)&', sPost, sVal)) sHeaders += 'User-Agent: '+HmsHttpDecode(sVal)+'\r\n';
   
   // Загружаем страницу с фильмом, где устанавливаются кукисы UserEnter и key (они важны!)
-  sHtml = HmsDownloadURL('http://tree.tv/player/'+sId+'/1?_='+Str(Random), 'Referer: '+sHeaders, true);
+  sHtml = HmsDownloadURL('http://tree.tv/player/'+sID+'/1?_='+VarToStr(DateTimeToTimeStamp1970(Now, true)), 'Referer: '+sHeaders, true);
+  
   // Подтверждение своего Fingerprint (значения mycook в куках)
   HmsRegExMatch('result=(.*?)&', sPost, sVal);
   sHeaders += 'Cookie: mycook='+sVal+'\r\n';
@@ -300,16 +303,16 @@ void GetLink_TreeTV() {
     return;
   }
   
-  HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
-  
-  bool bLogQual = HmsRegExMatch('--logqual', mpPodcastParameters, '');
-  
   sHeaders = ReplaceStr(sHeaders, mpFilePath, "http://player.tree.tv/?file="+sID+"&source=1&user=false");
-  //sData = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
-
   HmsRegExMatch('id=(\\w+)', sLink, sID);
-  sData = HmsSendRequestEx('player.tree.tv', '/guard/playlist/?id='+sID, 'GET', '', sHeaders, '', 80, 0x10, '', true);
+  sData = HmsSendRequestEx('player.tree.tv', '/guard/playlist/?id='+sID, 'GET', '', sHeaders, '', 80, 0x00, '', true);
+  if (Pos('#EXTM3U', sData)<1) {
+    HmsLogMessage(2, "Не удалось загрузить m3u8 плейлист.");
+    return;
+  }
 
+  HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
+  bool bLogQual = HmsRegExMatch('--logqual', mpPodcastParameters, '');
   sAvalQual = "Доступное качество: ";
   // Еслии указано качество - выбираем из плейлиста соответствующий плейлист
   if (sQual!='') {
