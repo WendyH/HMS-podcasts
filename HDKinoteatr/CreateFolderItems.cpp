@@ -1,4 +1,4 @@
-﻿// 2017.04.07
+﻿// 2017.06.07
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -19,7 +19,8 @@ int       gnDefaultTime = 6000;
 // Установка переменной Podcast: поиск родительской папки, содержащий скрипт
 THmsScriptMediaItem GetRoot() {
   Podcast = FolderItem; // Начиная с текущего элемента, ищется создержащий срипт
-  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
+  while ((Trim(Podcast[550])=='') && (Podcast[532]!='1') && (Podcast.ItemParent!=nil)) 
+    Podcast=Podcast.ItemParent;
   return Podcast;
 }
 
@@ -343,7 +344,7 @@ void CheckPodcastUpdate() {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка актуальности версии функции GetLink_Moonwalk в скриптах
 void CheckMoonwalkFunction() {
-  string sData, sFuncOld, sFuncNew; TJsonObject JSON; TDateTime UPDTIME;
+  string sData, sFuncOld, sFuncNew; TJsonObject JSON;
   int nTimePrev, nTimeNow, mpiTimestamp=100862, mpiMWVersion=100821; 
   string sPatternMoonwalkFunction = "(// Получение ссылки с moonwalk.cc.*?// Конец функции поулчения ссылки с moonwalk.cc)";
   
