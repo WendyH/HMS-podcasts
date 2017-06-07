@@ -1,4 +1,4 @@
-// VERSION = 2017.04.08
+﻿// VERSION = 2017.06.07
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -28,7 +28,7 @@ string gsHeaders = 'Referer: '+gsUrlBase+'/\r\n'+              // HTTP заго�
 
 string    gsTVDBInfo   = "";
 bool gbUseSerialKPInfo = false;
-
+ 
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
 
@@ -36,7 +36,8 @@ bool gbUseSerialKPInfo = false;
 // Установка переменной Podcast: поиск родительской папки, содержащий скрипт
 THmsScriptMediaItem GetRoot() {
   Podcast = FolderItem; // Начиная с текущего элемента, ищется создержащий срипт
-  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
+  while ((Trim(Podcast[550])=='') && (Podcast[532]!='1') && (Podcast.ItemParent!=nil)) 
+    Podcast=Podcast.ItemParent;
   return Podcast;
 }
 
@@ -335,10 +336,9 @@ void CreateMoonwallkLinks(string sLink) {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка и обновление скриптов подкаста
 void CheckPodcastUpdate() {
-  THmsScriptMediaItem Podcast=FolderItem; TJsonObject JSON, JFILE; TJsonArray JARRAY;
-  string sData, sName, sLang, sExt, sMsg; int i, mpiTimestamp=100602, mpiSHA, mpiScript; bool bChanges=false;
+  TJsonObject JSON, JFILE; TJsonArray JARRAY; bool bChanges=false;
+  string sData, sName, sLang, sExt, sMsg; int i, mpiTimestamp=100602, mpiSHA, mpiScript;
   
-  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast = Podcast.ItemParent; // Ищем скрипт получения ссылки на поток
   // Если после последней проверки прошло меньше получаса - валим
   if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
@@ -372,12 +372,12 @@ void CheckPodcastUpdate() {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка актуальности версии функции GetLink_Moonwalk в скриптах
 void CheckMoonwalkFunction() {
-  string sData, sFuncOld, sFuncNew; TJsonObject JSON;
+  string sData, sFuncOld, sFuncNew; TJsonObject JSON; TDateTime UPDTIME;
   int nTimePrev, nTimeNow, mpiTimestamp=100862, mpiMWVersion=100821; 
   string sPatternMoonwalkFunction = "(// Получение ссылки с moonwalk.cc.*?// Конец функции поулчения ссылки с moonwalk.cc)";
   
   // Если после последней проверки прошло меньше получаса - валим
-  while ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 3600)) return; // раз в час
+  if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 3600)) return; // раз в час
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   if (HmsRegExMatch(sPatternMoonwalkFunction, Podcast[550], sFuncOld, 1, PCRE_SINGLELINE)) {
     sData = HmsUtf8Decode(HmsDownloadURL("https://api.github.com/gists/3092dc755ad4a6c412e2fcd17c28d096", "Accept-Encoding: gzip, deflate", true));
@@ -413,3 +413,4 @@ void CheckMoonwalkFunction() {
 
   HmsLogMessage(1, Podcast[mpiTitle]+' "'+mpTitle+'": Создано элементов - '+IntToStr(gnTotalItems));
 }
+
