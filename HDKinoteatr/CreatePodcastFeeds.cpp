@@ -1,4 +1,4 @@
-﻿// 2017.04.07
+﻿// 2017.06.07
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -18,7 +18,8 @@ string    gsAPIUrl     = "http://api.lostcut.net/hdkinoteatr/";
 // Установка переменной Podcast: поиск родительской папки, содержащий скрипт
 THmsScriptMediaItem GetRoot() {
   Podcast = FolderItem; // Начиная с текущего элемента, ищется создержащий срипт
-  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
+  while ((Trim(Podcast[550])=='') && (Podcast[532]!='1') && (Podcast.ItemParent!=nil)) 
+    Podcast=Podcast.ItemParent;
   return Podcast;
 }
 
@@ -100,9 +101,16 @@ string GetGroupName(string sName) {
 // Создание папки с категориями
 void CreateCategories(THmsScriptMediaItem Parent, string sName, string sLink, string sParams='') {
   string sData, sVal, sRes; int i; TJsonObject JSON, VIDEO; TJsonArray JARRAY;
-  THmsScriptMediaItem Folder;
+  THmsScriptMediaItem Folder, Item; string sGrp='', sSort;
   
   Folder = CreateFolder(Parent, sName, sLink, sParams, true);
+  HmsRegExMatch('group=(\\w+)', sParams, sSort);
+  switch (sSort) {
+    case 'year': { sSort="-mpFileName"  ; }
+    case 'alph': { sSort="mpFileName"   ; }
+    default    : { sSort="-mpCreateDate"; }
+  }
+  
   if      (Pos('category', sLink)>0) sRes = 'categories';
   else if (Pos('country' , sLink)>0) sRes = 'countries';
   else return;
@@ -117,9 +125,11 @@ void CreateCategories(THmsScriptMediaItem Parent, string sName, string sLink, st
     JARRAY = JSON.AsArray; if (JARRAY==nil) return;
     for (i=0; i<JARRAY.Length; i++) {
       VIDEO = JARRAY[i];
-      CreateFolder(Folder, VIDEO.S['name'], sLink+'='+VIDEO.S['id']);
+      Item = CreateFolder(Folder, VIDEO.S['name'], sLink+'='+VIDEO.S['id']);
+      Item[mpiFolderSortOrder] = sSort;
     }
   } finally { JSON.Free; }
+  
 }
 
 ///////////////////////////////////////////////////////////////////////////////
