@@ -143,7 +143,7 @@ void GetLink_Moonwalk(string sLink) {
     while(HmsRegExMatch3('["\']([\\w-_]+)["\']\\s*?:\\s*?["\'](\\w+)["\'](.*)', sPage, sVal, sVer, sPage, PCRE_SINGLELINE)) sHeaders += sVal+': '+sVer+'\r\n';
   }
   
-  if (!HmsRegExMatch('/new_session.*?\\{(.*?)\\}', sHtml, sPost)) {
+  if (!HmsRegExMatch('window\\[[^]]+]\\s*=\\s*\\{(.*?)\\}', sHtml, sPost)) {
     HmsLogMessage(2, mpTitle+': Не найдены параметры new_session на странице.');
   }
   sPost = ReplaceStr(sPost, ':', '=');
@@ -178,7 +178,8 @@ void GetLink_Moonwalk(string sLink) {
     sPost += '&'+sVar+'='+sVal;
   }
   HmsRegExMatch('//(.*?)/', sLink, sServ);
-  sData = HmsSendRequest(sServ, '/sessions/new_session', 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
+  HmsRegExMatch("'(/manifests/.*?)'", sHtml, sPage);
+  sData = HmsSendRequest(sServ, sPage, 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
   sData = HmsJsonDecode(sData);
   
   if (bHdsDump && HmsRegExMatch('"manifest_f4m"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
@@ -190,14 +191,14 @@ void GetLink_Moonwalk(string sLink) {
     // Получение длительности видео, если она не установлена
     // ------------------------------------------------------------------------
     sData = HmsDownloadUrl(sLink, 'Referer: '+sHeaders, true);
-    sVal  = Trim(PodcastItem[mpiTimeLength]);
+    sVal  = Trim(PodcastItem.ItemOrigin[mpiTimeLength]);
     if ((sVal=='') || (RightCopy(sVal, 6)=='00.000')) {
       if (HmsRegExMatch('(http.*?)[\r\n$]', sData, sLink)) {
         sHtml = HmsDownloadUrl(sLink, 'Referer: '+sHeaders, true);
-        RE = TRegExpr.Create('#EXTINF:(\\d+.\\d+)', PCRE_SINGLELINE);
+        RE = TRegExpr.Create('#EXTINF:(\\d+.\\d+)', PCRE_SINGLELINE); f=0;
         if (RE.Search(sHtml)) do f += StrToFloatDef(RE.Match(1), 0); while (RE.SearchAgain());
         RE.Free;
-        PodcastItem.Properties[mpiTimeLength] = Round(f);
+        if (f > 0) PodcastItem.ItemOrigin[mpiTimeLength] = HmsTimeFormat(Round(f))+'.000';
       }
     }
     // ------------------------------------------------------------------------
@@ -225,6 +226,16 @@ void GetLink_Moonwalk(string sLink) {
         if      (sQual=='low'   ) sSelectedQual = QLIST.Names[0];
         else if (sQual=='medium') sSelectedQual = QLIST.Names[Round((QLIST.Count-1) / 2)];
         else if (sQual=='high'  ) sSelectedQual = QLIST.Names[QLIST.Count - 1];
+        else if (HmsRegExMatch('(\\d+)', sQual, sQual)) {
+          extended minDiff = 999999; // search nearest quality
+          for (i=0; i < QLIST.Count; i++) {
+            extended diff = StrToInt(QLIST.Names[i]) - StrToInt(sQual);
+            if (Abs(diff) < minDiff) {
+              minDiff = Abs(diff);
+              sSelectedQual = QLIST.Names[i];
+            }
+          }
+        }
       }
       if (sSelectedQual != '') MediaResourceLink = ' ' + QLIST.Values[sSelectedQual];
       if (bQualLog) {
@@ -778,6 +789,7 @@ void ItemMarkViewed(THmsScriptMediaItem Item) {
 void FillVideoInfo(THmsScriptMediaItem Item) {
   string sData='', sSeason, sEpisode, sName, s1, s2;
   THmsScriptMediaItem Folder = GetItemWithInfo();
+  
   if (Folder!=nil) sData = Folder[mpiJsonInfo];
   TJsonObject VIDEO = TJsonObject.Create();
   try {
