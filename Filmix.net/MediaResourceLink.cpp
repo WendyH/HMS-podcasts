@@ -1,5 +1,5 @@
-﻿// 2017.03.30
-////////////////////////  Создание  списка  видео   ///////////////////////////
+﻿// 2017.09.01
+//////////////////  Получение ссылок на медиа-ресурс   ////////////////////////
 #define mpiSeriesInfo 10323  // Идентификатор для хранения информации о сериях
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -10,6 +10,12 @@ int       gnTime       = 6000;
 int       gnTotalItems = 0;
 TDateTime gStart       = Now;
 string    gsSeriesInfo = ''; // Информация о сериях сериала (названия)
+string    gsHeaders = mpFilePath+'\r\n'+
+                  'Accept: application/json, text/javascript, */*; q=0.01\r\n'+
+                  'Accept-Encoding: identity\r\n'+
+                  'Origin: '+gsUrlBase+'\r\n'+
+                  'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36\r\n'+
+                  'X-Requested-With: XMLHttpRequest\r\n';
 
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
@@ -42,6 +48,18 @@ string DecodeUppodText (string sData) {
   return sData;
 } 
 
+///////////////////////////////////////////////////////////////////////////////
+// Декодирование ссылок для HTML5 плеера
+string Html5Decode(string sEncoded) {
+  if ((sEncoded=="") || (Pos(".", sEncoded) > 0)) return sEncoded;
+  if (sEncoded[1]=="#") sEncoded = Copy(sEncoded, 2, Length(sEncoded)-1);
+  string sDecoded = "";
+  for (int i=1; i <= Length(sEncoded); i+=3) {
+    sDecoded += "\\u0" + Copy(sEncoded, i, 3);
+  }
+  return HmsJsonDecode(sDecoded);
+  
+}
 ///////////////////////////////////////////////////////////////////////////////
 // ---- Создание ссылки на видео ----------------------------------------------
 THmsScriptMediaItem AddMediaItem(THmsScriptMediaItem Folder, string sTitle, string sLink, string sGrp='') {
@@ -135,8 +153,11 @@ void CreateSeriesFromPlaylist(THmsScriptMediaItem Folder, string sLink, string s
   if (Pos('{', sLink)>0) {
     sData = sLink;
   } else {
-    sData = HmsDownloadURL(sLink, "Accept-Encoding: identity\r\nReferer: "+mpFilePath);  // Загружаем плейлист
-    sData = DecodeUppodText(sData);                               // Дешифруем
+    sData = HmsDownloadURL(sLink, "Referer: "+gsHeaders); // Загружаем плейлист
+    if (LeftCopy(sData, 1)=="#")
+      sData = Html5Decode(sData);               // Дешифруем
+    else
+      sData = DecodeUppodText(sData);           // Дешифруем
   }  
   
   JSON  = TJsonObject.Create();                 // Создаём объект для работы с Json
@@ -205,13 +226,7 @@ string getDataPlayer(string meta_keys) {
 void CreateLinks() {
   String sHtml, sData, sName, sLink, sVal, sID, sServ, sPage, sPost, sKey;
   THmsScriptMediaItem Item; TRegExpr RegExp; int i, nCount, n; TJsonObject JSON, TRANS;
-  string sHeaders = mpFilePath+'\r\n'+
-                    'Accept: application/json, text/javascript, */*; q=0.01\r\n'+
-                    'Accept-Encoding: identity\r\n'+
-                    'Origin: '+gsUrlBase+'\r\n'+
-                    'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36\r\n'+
-                    'X-Requested-With: XMLHttpRequest\r\n';
-  sHtml = HmsDownloadURL(mpFilePath, "Accept-Encoding: identity\r\nReferer: "+mpFilePath);  // Загружаем страницу сериала
+  sHtml = HmsDownloadURL(mpFilePath, "Referer: "+gsHeaders);  // Загружаем страницу сериала
   sHtml = HmsUtf8Decode(HmsRemoveLineBreaks(sHtml));
   
   if (!HmsRegExMatch('data-id="(\\d+)"', sHtml, sID)) {
@@ -226,29 +241,36 @@ void CreateLinks() {
   // -------------------------------------------------
   // Собираем информацию о фильме
   if (HmsRegExMatch('Время:(.*?)<br', sHtml, sData)) {
-    if (HmsRegExMatch('(\\d+)\\s+мин', ' '+sData, sVal)) 
+    if (HmsRegExMatch('(\\d+)\\s+мин', ' '+sData, sVal)) {
       gnTime = StrToInt(sVal)*60+120; // Из-за того что серии иногда длинее, добавляем пару минут
+    }
     PodcastItem[mpiTimeLength] = gnTime;
   }
   HmsRegExMatch('/year-(\\d{4})"', sHtml, PodcastItem[mpiYear]);
   if (HmsRegExMatch('(<a[^>]+genre.*?)</div>', sHtml, sVal)) PodcastItem[mpiGenre] = HmsHtmlToText(sVal);
   // -------------------------------------------------
 
-  gsSeriesInfo = HmsSendRequestEx(sServ, '/api/episodes/get', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, 'post_id='+sID, 443, 16, '', true);
+  gsSeriesInfo = HmsSendRequestEx(sServ, '/api/episodes/get', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, 'post_id='+sID, 443, 16, '', true);
   
   HmsRegExMatch("meta_key\\s*=\\s*\\[(.*?)\\]", sHtml, sVal);
-  sKey = getDataPlayer(sVal);
-  sData = HmsSendRequestEx(sServ, '/api/movies/player_data', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, 'post_id='+sID+'&key='+sKey, 443, 16, '', true);
+  //sKey = getDataPlayer(sVal);
+  sData = HmsSendRequestEx(sServ, '/api/movies/player_data', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, 'post_id='+sID, 443, 16, '', true);
   
   JSON  = TJsonObject.Create();
   try {
+    bool bHtml5 = true;
     JSON.LoadFromString(sData);
-    TRANS = JSON['message\\translations\\flash'];
+    TRANS  = JSON['message\\translations\\html5'];
+    if (TRANS.Count == 0) {
+      TRANS  = JSON['message\\translations\\flash'];
+      bHtml5 = false;
+    }
     nCount = TRANS.Count;
     for (i=0; i<nCount; i++) {
       sName = TRANS.Names[i];
       sLink = TRANS.S[sName];
-      sLink = DecodeUppodText(sLink);
+      if (bHtml5) sLink = Html5Decode(sLink);
+      else        sLink = DecodeUppodText(sLink);
       sLink = HmsExpandLink(sLink, gsUrlBase);
 
       if (HmsRegExMatch('/pl/', sLink, '')) {

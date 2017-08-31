@@ -1,4 +1,4 @@
-﻿// 2017.03.30
+﻿// 2017.09.01
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -7,6 +7,16 @@ THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подка
 string    gsUrlBase    = 'http://filmix.me';   // Url база ссылок нашего сайта
 int       gnTotalItems = 0;                    // Количество созданных элементов
 TDateTime gStart       = Now;                  // Время запуска скрипта
+int       gnMaxPages   = 10; // Макс. кол-во страниц для загрузки списка видео
+
+// Регулярные выражения для поиска на странице блоков с информацией о видео
+string gsPatternBlock  = '<article(.*?)</article>';
+string gsPatternTitle  = '(<div[^>]+name.*?</(h\\d|div)>)'; // Название
+string gsPatternLink   = '<a[^>]+href="([^"]+html)"'; // Ссылка
+string gsPatternYear   = '-(\\d{4}).html';            // Год
+string gsPatternImg    = '<img[^>]+src="(.*?)"';      // Картинка
+string gsPatternPages  = '.*/page/\\d+/">(\\d+)';     // Поиск максимального номера страницы
+string gsPagesParam    = 'page/<PN>/';
 
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
@@ -43,27 +53,41 @@ string GetGroupName(string sName) {
 ///////////////////////////////////////////////////////////////////////////////
 // --- Создание структуры -----------------------------------------------------
 void CreateVideoFolders() {
-  string sHtml, sData, sName, sLink, sImg, sYear, sVal, sGroupingKey, sGrp; 
+  string sHtml, sData, sName, sLink, sImg, sYear, sVal, sGroupingKey='none', sGrp; 
   int i, nPages, nMaxInGroup, iCnt, nGrp; TRegExpr RegEx;           // Объявляем переменные
   THmsScriptMediaItem Folder = FolderItem;
 
   sHtml  = ''; // Текст загруженных страниц сайта
-  nPages = 8;  // Количество загружаемых страниц
+  nPages = gnMaxPages;  // Количество загружаемых страниц
   nMaxInGroup = 100;
   
   HmsRegExMatch('--group=(\\w+)', mpPodcastParameters, sGroupingKey);
   if (HmsRegExMatch('--pages=(\\d+)', mpPodcastParameters, sVal)) nPages = StrToInt(sVal);
   
+  if (HmsRegExMatch('--maxingroup=(\\d+)', mpPodcastParameters, sVal)) nMaxInGroup = StrToInt(sVal);
+  if (HmsRegExMatch('--maxpages=(\\d+)'  , mpPodcastParameters, sVal)) gnMaxPages  = StrToInt(sVal);
+  
   // Проверяем, не заняться ли нам поиском?
   if (LeftCopy(mpFilePath, 4)!='http') {
     // Если в поле "Ссылка" нет реальной ссылки, то делаем ссылку сами - будем искать наименование
     mpFilePath = 'http://filmix.me/engine/ajax/sphinx_search.php?search_start=0&do=search&subaction=search&sort_name=&undefined=asc&sort_date=&sort_favorite=&searchSortby=&no_trailer=on&story='+HmsHttpEncode(HmsUtf8Encode(mpTitle));
-    sHtml  = HmsUtf8Decode(HmsDownloadUrl(mpFilePath)); // Загружаем страницу
     nPages = 0; // Это чтобы не загружались следующие страницы (загружать так их уже не получится)
+
+  } else if (Pos("/catalog/", mpFilePath)>0) {
+    gsPatternBlock = '(class="film".*?</div>)';
+    gsPatternTitle = '(<div[^>]+name.*?</div>)'; // Название
+    
   }
 
-  // Загружаем первые сколько-то страниц
-  for (i=1; i<nPages; i++) {
+  sHtml  = HmsUtf8Decode(HmsDownloadUrl(mpFilePath)); // Загружаем страницу
+  
+  // Дозагрузка страниц (если задан шаблон поиска максимального номера сраницы)
+  if ((gsPatternPages!='') && HmsRegExMatch(gsPatternPages, sHtml, sVal, 1, PCRE_SINGLELINE)) {
+    nPages = StrToInt(sVal); // Номер последней страницы
+    if (nPages > gnMaxPages) nPages = gnMaxPages;
+  }    
+
+  for (i=2; i<nPages; i++) {
     HmsSetProgress(Trunc(i*100/nPages));                                         // Устанавливаем позицию прогресса загрузки 
     HmsShowProgress(Format('%s: Страница %d из %d', [mpTitle, i, nPages]));      // Показываем окно прогресса
     sHtml += HmsUtf8Decode(HmsDownloadUrl(mpFilePath+'/page/'+IntToStr(i)+'/')); // Загружаем страницу
@@ -73,15 +97,19 @@ void CreateVideoFolders() {
   sHtml = HmsRemoveLineBreaks(sHtml);   // Удаляем переносы строк, для облегчения работы с регулярными выражениями
 
   // Создаём объект для поиска и ищем в цикле по регулярному выражению
-  RegEx = TRegExpr.Create('<article(.*?)</article>'); 
+  RegEx = TRegExpr.Create(gsPatternBlock); 
   try {
+    if (sGroupingKey=='none') {
+      i=0; if (RegEx.Search(sHtml)) do i++; while (RegEx.SearchAgain);
+      if (i>nMaxInGroup) sGroupingKey = "quant";
+    }
     if (RegEx.Search(sHtml)) do {       // Если нашли совпадение, запускаем цикл
       sLink=''; sName=''; sImg=''; sYear=''; // Очищаем переменные от предыдущих значений
       
-      HmsRegExMatch('<a[^>]+href="(.*?)"'     , RegEx.Match, sLink); // Ссылка
-      HmsRegExMatch('(<div[^>]+name.*?</(h\\d|div)>)', RegEx.Match, sName); // Наименование
-      HmsRegExMatch('<img[^>]+src="(.*?)"'    , RegEx.Match, sImg ); // Картинка
-      HmsRegExMatch('year.*?(\\d{4})'         , RegEx.Match, sYear); // Год
+      HmsRegExMatch(gsPatternLink , RegEx.Match, sLink); // Ссылка
+      HmsRegExMatch(gsPatternTitle, RegEx.Match, sName); // Наименование
+      HmsRegExMatch(gsPatternImg  , RegEx.Match, sImg ); // Картинка
+      HmsRegExMatch(gsPatternYear , RegEx.Match, sYear); // Год
 
       if (sLink=='') continue;          // Если нет ссылки, значит что-то не так
        
@@ -120,8 +148,8 @@ void CheckPodcastUpdate() {
   TJsonObject JSON, JFILE; TJsonArray JARRAY; bool bChanges=false;
   
   // Если после последней проверки прошло меньше получаса - валим
-  if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 1800)) return;
-  Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
+  if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
+    Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   sData = HmsDownloadURL('https://api.github.com/repos/WendyH/HMS-podcasts/contents/Filmix.net', "Accept-Encoding: gzip, deflate", true);
   JSON  = TJsonObject.Create();
   try {
@@ -139,7 +167,7 @@ void CheckPodcastUpdate() {
       if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
         if (sData=='') continue;                                                     // Если не получилось загрузить, пропускаем
-        Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
+          Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
         Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
         Podcast[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
         HmsLogMessage(1, Podcast[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
