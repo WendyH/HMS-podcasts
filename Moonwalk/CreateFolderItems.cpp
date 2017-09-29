@@ -258,8 +258,9 @@ void LoadAndParse() {
 ///////////////////////////////////////////////////////////////////////////////
 // Создание списка серий сериала с Moonwalk.cc
 void CreateMoonwallkLinks(string sLink) {
-  String sHtml, sData, sSerie, sVal, sHeaders, sEpisodeTitle, sShowTitle, sID;
-  int n, nEpisode, nSeason; TRegExpr RE; THmsScriptMediaItem Item, Folder = FolderItem;
+  String sHtml, sData, sServ, sRef, sSerie, sVal, sHeaders, sID;
+  int n, nEpisode, nSeason; THmsScriptMediaItem Item, Folder = FolderItem;
+  TJsonObject JSON; TJsonArray JARRAY, EPISODE; bool bOneSeason;
   
   sHeaders = sLink+'/\r\n'+
              'Accept-Encoding: gzip, deflate\r\n'+
@@ -279,58 +280,48 @@ void CreateMoonwallkLinks(string sLink) {
   
   if (Trim(mpSeriesTitle)=='') { FolderItem[mpiSeriesTitle] = mpTitle; HmsRegExMatch('^(.*?)[\\(\\[]', mpTitle, FolderItem[mpiSeriesTitle]); }
   
-  // Подсчитываем количество серий и запоминаем в укромном месте
-  RE = TRegExpr.Create('(<option[^>]+value="(.*?)".*?</option>)', PCRE_SINGLELINE);
-  n = 0; if (RE.Search(sHtml)) do n++; while (RE.SearchAgain()); FolderItem[100508] = Str(n);
-  
-  if (HmsRegExMatch('<select[^>]+id="episode"(.*?)</select>', sHtml, '')) {
-    if (HmsRegExMatch('season=(\\d+)', sLink, sVal)) {
-      gsTime  = '00:45:00.000';
-      nSeason = StrToInt(sVal);
-      HmsRegExMatch('<select[^>]+id="episode"(.*?)</select>', sHtml, sData);
-      RE = TRegExpr.Create('(<option[^>]+value="(.*?)".*?</option>)', PCRE_SINGLELINE);
-      if (RE.Search(sData)) do {
-        sSerie = ReplaceStr(HmsHtmlToText(RE.Match(1)), '/', '-');
-        // Форматируем номер в два знака
-        if (HmsRegExMatch("(\\d+)", sSerie, sVal)) {
-          nEpisode = StrToInt(sVal);
-          sSerie   = Format("%.2d %s", [nEpisode, ReplaceStr(sSerie, sVal, "")]);
-        }
-        Item = CreateMediaItem(Folder, sSerie, sLink+'&episode='+RE.Match(2), mpThumbnail, gsTime);
-        GetSerialInfo(Item, nSeason, nEpisode);
-      } while (RE.SearchAgain());
-      RE.Free();
-    } else if (HmsRegExMatch('<select[^>]+id="season"(.*?)</select>', sHtml, sData)) {
-      RE = TRegExpr.Create('(<option[^>]+value="(.*?)".*?</option>)', PCRE_SINGLELINE);
-      // Подсчитываем количество сезонов
-      n = 0; if (RE.Search(sData)) do { n++; HmsRegExMatch("(\\d+)", HmsHtmlToText(RE.Match(1)), sVal); } while (RE.SearchAgain());
-      if ( (n == 1) && (sVal == '1') ) {
-        // Если сезон всего один и номер его = 1, то сразу выкатываем серии
-        gsTime   = '00:45:00.000';
-        nSeason  = 1;
-        HmsRegExMatch('<select[^>]+id="episode"(.*?)</select>', sHtml, sData);
-        if (RE.Search(sData)) do {
-          sSerie = ReplaceStr(HmsHtmlToText(RE.Match(1)), '/', '-');
-          // Форматируем номер в два знака
-          if (HmsRegExMatch("(\\d+)", sSerie, sVal)) {
-            nEpisode = StrToInt(sVal);
-            sSerie   = Format("%.2d %s", [nEpisode, ReplaceStr(sSerie, sVal, "")]);
-          }
-          Item = CreateMediaItem(Folder, sSerie, sLink+'?season=1&episode='+RE.Match(2), mpThumbnail, gsTime);
-          GetSerialInfo(Item, nSeason, nEpisode);
-        } while (RE.SearchAgain());
-      } else {
-        if (RE.Search(sData)) do {
-          sSerie = ReplaceStr(HmsHtmlToText(RE.Match(1)), '/', '-');
-          Item = CreateFolder(Folder, sSerie, sLink+'?season='+RE.Match(2), mpThumbnail);
-          Item[mpiSeriesTitle] = FolderItem[mpiSeriesTitle];
-        } while (RE.SearchAgain());
-      }
-      RE.Free();
-    }
-  } else {
-    CreateMediaItem(Folder, mpTitle, sLink, mpThumbnail, gsTime);
+  if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
+    HmsLogMessage(2, mpTitle+': Не найдены данные VideoBalancer в iframe.');
+    return;    
   }
+  JSON = TJsonObject.Create();
+  try {
+    JSON.LoadFromString(sData);
+    HmsRegExMatch("'(.*?)'", JSON.S['ref'], sRef);
+    nSeason = 0;
+    if (HmsRegExMatch2('^(.*?)\\?season=(\\d+)', sLink, sLink, sVal)) nSeason = StrToInt(sVal);
+    
+    // Подсчитываем количество серий и запоминаем в укромном месте
+    n = JSON['episodes'].Count; FolderItem[100508] = Str(n);
+    JARRAY = JSON.A['seasons'];
+    // Если в ссылке указан номер сезона - показываем только серии этого сезона
+    // Если сезон всего один и номер его = 1, то сразу выкатываем серии
+    if (JARRAY != nil) bOneSeason = (JARRAY.Length == 1) && (JARRAY.I[0] == 1);
+    if ((nSeason > 0) || bOneSeason) {
+      gsTime = '00:45:00.000';
+      JARRAY = JSON.A['episodes'];
+      for (n=0; n < JARRAY.Length; n++) {
+        EPISODE  = JARRAY[n].AsArray;
+        nSeason  = EPISODE.I[0];
+        nEpisode = EPISODE.I[1];
+        sSerie   = Format("%.2d серия", [nEpisode]); // Форматируем номер в два знака
+        Item = CreateMediaItem(Folder, sSerie, sLink+'?season='+Str(nSeason)+'&episode='+Str(nEpisode)+'&ref='+sRef, mpThumbnail, gsTime);
+        GetSerialInfo(Item, nSeason, nEpisode);
+      }
+    } else if (JARRAY != nil) {
+      // Создаём список сезонов как папки
+      for (n=0; n < JARRAY.Length; n++) {
+        nSeason  = JARRAY.I[n];
+        sSerie   = Format("%d сезон", [nSeason]); // Форматируем номер в два знака
+        Item = CreateFolder(Folder, sSerie, sLink+'?season='+Str(nSeason)+'&ref='+sRef, mpThumbnail);
+        Item[mpiSeriesTitle] = FolderItem[mpiSeriesTitle];
+      }
+    } else {
+      // Просто ссылка на фильм
+      Item = CreateMediaItem(Folder, mpTitle, sLink, mpThumbnail, gsTime);
+    }
+
+  } finally { JSON.Free; }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -341,7 +332,7 @@ void CheckPodcastUpdate() {
   
   // Если после последней проверки прошло меньше получаса - валим
   if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
-  Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
+    Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   sData = HmsDownloadURL('https://api.github.com/repos/WendyH/HMS-podcasts/contents/Moonwalk', "Accept-Encoding: gzip, deflate", true);
   JSON  = TJsonObject.Create();
   try {
@@ -359,7 +350,7 @@ void CheckPodcastUpdate() {
       if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
         if (sData=='') continue;                                                     // Если не получилось загрузить, пропускаем
-        Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
+          Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
         Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
         Podcast[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
         HmsLogMessage(1, Podcast[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
