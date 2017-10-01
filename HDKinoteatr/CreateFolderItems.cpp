@@ -1,4 +1,4 @@
-﻿// 2017.06.07
+﻿// 2017.10.01
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -139,6 +139,7 @@ void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder)
 
       } else {
         Item = CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
+        if (JOBJECT.B["subs"]) Item[mpiSubtitleLanguage] = HmsSubtitlesDirectory+'\\'+Item.ItemID+'.srt';
         FillVideoInfo(Item);
       }
 

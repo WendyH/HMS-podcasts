@@ -1,4 +1,4 @@
-﻿// 2017.04.07
+﻿// 2017.10.01
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -107,8 +107,9 @@ bool GetLink_VK(string sLink) {
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с moonwalk.cc
 void GetLink_Moonwalk(string sLink) {
-  string sHtml, sData, sPage, sPost, sManifest, sVer, sSec, sQual, sVal, sServ, sRet, sCookie, sVar;
+  string sHtml, sData, sJsData, sPost, sVer, sQual, sVal, sServ, sVar, sUrlBase;
   int i; float f; TRegExpr RE; bool bHdsDump, bQualLog;
+  TJsonObject JSON, OPTIONS, POSTDATA;
   
   string sHeaders = sLink+'\r\n'+
                     'Accept-Encoding: identity\r\n'+
@@ -119,68 +120,77 @@ void GetLink_Moonwalk(string sLink) {
   bHdsDump = Pos('--hdsdump'      , mpPodcastParameters) > 0;
   bQualLog = Pos('--qualitylog'   , mpPodcastParameters) > 0;
   
-  sLink = ReplaceStr(sLink, 'moonwalk.co', 'moonwalk.cc');
-  sLink = ReplaceStr(sLink, 'moonwalk.pw', 'moonwalk.cc');
-  HmsRegExMatch2('//(.*?)(/.*)', sLink, sServ, sPage);
-  sHtml = HmsSendRequestEx(sServ, sPage, 'GET', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, '', 80, 0, sRet, true);
-  if (HmsRegExMatch('<iframe[^>]+src="(http.*?)"', sHtml, sLink)) {
-    sLink = ReplaceStr(sLink, 'moonwalk.co', 'moonwalk.cc');
-    sLink = ReplaceStr(sLink, 'moonwalk.pw', 'moonwalk.cc');
-    HmsRegExMatch2('//(.*?)(/.*)', sLink, sServ, sPage);
-    sHtml = HmsSendRequestEx(sServ, sPage, 'GET', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, '', 80, 0, sRet, true);
-  }
-  if (HmsRegExMatch('"csrf-token"\\s+content="(.*?)"', sHtml, sVal)) sHeaders += 'X-CSRF-Token:'+sVal+'\r\n';
-  sCookie = "";
-  if (HmsRegExMatch('Set-Cookie:', sRet, '')) {
-    while(HmsRegExMatch2('Set-Cookie:\\s*([^;]+)(.*)', sRet, sVal, sRet, PCRE_SINGLELINE)) sCookie += " "+sVal+";";
-  }
-  if (!HmsRegExMatch('(https?://.*?)/', sLink, sVal)) sVal = 'http://moonwalk.cc';
-  sHeaders += 'Cookie:'+sCookie+'\r\n'+
-              'Origin: '+sVal+'\r\n'+
-              'X-Requested-With: XMLHttpRequest\r\n';
-  // Поиск дополнительных HTTP заголовков, которые нужно установить
-  if (HmsRegExMatch('ajaxSetup\\([^)]+headers:(.*?)}', sHtml, sPage)) {
-    while(HmsRegExMatch3('["\']([\\w-_]+)["\']\\s*?:\\s*?["\'](\\w+)["\'](.*)', sPage, sVal, sVer, sPage, PCRE_SINGLELINE)) sHeaders += sVal+': '+sVer+'\r\n';
-  }
+  // Замена домена moonwalk.co и moonwalk.pw на moonwalk.cc
+  HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
+  sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
   
-  if (!HmsRegExMatch('window\\[[^]]+]\\s*=\\s*\\{(.*?)\\}', sHtml, sPost)) {
-    HmsLogMessage(2, mpTitle+': Не найдены параметры new_session на странице.');
+  if (HmsRegExMatch('<iframe[^>]+src="(http.*?)"', sHtml, sLink)) {
+    // Если внутри есть ссылка на iframe - загружаем его
+    HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
+    sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
   }
-  sPost = ReplaceStr(sPost, ':', '=');
-  sPost = ReplaceStr(sPost, ' ', '' );
-  sPost = ReplaceStr(sPost, "'", '' );
-  sPost = ReplaceStr(sPost, ',', '&');
-  sPost = ReplaceStr(sPost, 'condition_detected?1=', '');
-  sPost = HmsRemoveLineBreaks(sPost);
-  // Замена имён переменных их значениями в параметрах запроса
-  sData = sPost;
-  while(HmsRegExMatch2('.(=(\\w+).*)', sData, sData, sVar)) {
-    if (HmsRegExMatch('var\\s'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal))
-      sPost = ReplaceStr(sPost, '='+sVar, '='+sVal);
-  }
-  // Замена имён переменных их значениями в параметрах запроса, установленных после
-  sData = sHtml;
-  while(HmsRegExMatch3('.(post_method\\.(\\w+)\\s*=\\s*(\\w+).*)', sData, sData, sVar, sVal)) {
-    if (HmsRegExMatch('var\\s'+sVal+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal))
-      sPost += '&'+sVar+'='+sVal;
-  }
-  sData = sHtml;
-  while(HmsRegExMatch3(".post_method\\.(\\w+)\\s*=\\s*'(.*?)'(.*)", sData, sVar, sVal, sData)) {
-      sPost += '&'+sVar+'='+sVal;
-  }
-  sData = sHtml;
-  while(HmsRegExMatch3("\\['(\\w+)'\\]\\s*=\\s*'(.*?)'(.*)", sData, sVar, sVal, sData)) {
-    sPost += '&'+sVar+'='+sVal;
-  }
-  if (HmsRegExMatch2("window\\[[^\\]]+\\]\\[(.*?)\\]\\s*=\\s*(.*?);", sHtml, sVar, sVal)) {
-    sVar = ReplaceStr(ReplaceStr(ReplaceStr(sVar, "+", ""), " ", ""), "'", "");
-    sVal = ReplaceStr(ReplaceStr(ReplaceStr(sVal, "+", ""), " ", ""), "'", "");
-    sPost += '&'+sVar+'='+sVal;
-  }
-  HmsRegExMatch('//(.*?)/', sLink, sServ);
-  HmsRegExMatch("'(/manifests/.*?)'", sHtml, sPage);
-  sData = HmsSendRequest(sServ, sPage, 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
-  sData = HmsJsonDecode(sData);
+  HmsRegExMatch2('(.*?//([^/]+))', sLink, sUrlBase, sServ); // Получаем UrlBase и домен
+  sHeaders += 'Origin: '+sUrlBase+'\r\nX-Requested-With: XMLHttpRequest\r\n';
+
+  JSON     = TJsonObject.Create();
+  OPTIONS  = TJsonObject.Create();
+  POSTDATA = TJsonObject.Create();
+  try {
+
+    // Ищем значения параметров (this.options)
+    if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
+      HmsLogMessage(2, mpTitle+": Не найдены данные VideoBalancer в iframe."); 
+      return;    
+    }
+
+    OPTIONS.LoadFromString(sData);
+
+    // Если есть субтитры и их ещё локально не сохраняли - загружаем
+    if ((OPTIONS.S["subtitles\\master_vtt"]!="") && (!FileExists(PodcastItem[mpiSubtitleLanguage]))) {
+      sData = HmsUtf8Decode(HmsDownloadURL(OPTIONS.S["subtitles\\master_vtt"], "Referer: "+sHeaders));
+      RE = TRegExpr.Create('(\\d{2}:\\d{2}:[\\d:,.\\s->]+.*?)(?=\n\\d{2}:d{2}:|\n\\d+\n|$)', PCRE_SINGLELINE);
+      i = 1; sVal = ""; // Форматируем
+      if (RE.Search(sData)) do { sVal += Format("%d\r\n%s\r\n\r\n", [i, RE.Match]); i++; } while (RE.SearchAgain);
+      sLink = HmsSubtitlesDirectory+'\\'+PodcastItem.ItemID+'.srt';
+      HmsStringToFile(sVal, sLink);             // Сохраняем субтитры локально
+      PodcastItem[mpiSubtitleLanguage] = sLink; // Указываем новое расположение
+    }
+
+    // Получение ссылки на js-скрипт, где есть список параметров POST запроса
+    if (!HmsRegExMatch('src="([^"]+/video-[^"]+.js)', sHtml, sVal)) {
+      HmsLogMessage(2, mpTitle+": Не найдена ссылка на js-скрипт в iframe."); 
+      return; 
+    }      
+    sJsData = HmsDownloadURL(HmsExpandLink(sVal, sUrlBase), 'Referer: '+sLink);
+    // Устанавливаем дополнительные заголовки и их значения
+    if (HmsRegExMatch('headers:({.*?})', sJsData, sVal)) {
+      JSON.LoadFromString(sVal);
+      for (i=0; i < JSON.Count; i++) {
+        sVal = JSON.Values[i].AsString;
+        if (HmsRegExMatch('this.options.(\\w+)', sVal, sVar)) sVal = OPTIONS.S[sVar];
+        sHeaders += JSON.Names[i] + ": " + sVal + "\r\n";
+      }
+    }
+    // Получаем параметры POST запроса
+    if (!HmsRegExMatch('var e=(\\{mw_key.*?\\})', sJsData, sData)) {
+      HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса."); 
+      return; 
+    }
+    POSTDATA.LoadFromString(sData);
+    // Формируем данные для POST
+    sPost = "";
+    for (i=0; i < POSTDATA.Count; i++) {
+      sVal = POSTDATA.Values[i].AsString;
+      if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
+      sPost += POSTDATA.Names[i] + "=" + sVal + "&";
+    }
+
+    sLink = "/manifests/video/"+OPTIONS.S["video_token"]+"/all";
+
+    sData = HmsSendRequest(sServ, sLink, 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
+    sData = ReplaceStr(HmsJsonDecode(sData), "\\r\\n", "");
+    
+  } finally {  JSON.Free; OPTIONS.Free; POSTDATA.Free; }
   
   if (bHdsDump && HmsRegExMatch('"manifest_f4m"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
     
@@ -256,7 +266,7 @@ void GetLink_Moonwalk(string sLink) {
   } else if (HmsRegExMatch('"manifest_mp4"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
     sData = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
     // Поддержка установленных приоритетов качества в настройках подкаста
-    TJsonObject JSON = TJsonObject.Create();
+    JSON = TJsonObject.Create();
     int height, selHeight=0, minPriority=99, priority, maxHeight;
     if (sQual=='medium') sQual='480'; if (sQual=='low') sQual='360';
     maxHeight = StrToIntDef(sQual, 4320);
@@ -745,6 +755,7 @@ void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder)
       if (sName=='Фильм') sName = mpTitle;
       if ((Pos('/serial/', sLink)>0) && (Pos('episode', sLink)<1))
         CreateFolder(Folder, sName, sLink, sImg);
+      
       else if (Pos('youtu', sLink) > 0) {
         
         if (Pos('Трейлер', sName)>0)
@@ -760,6 +771,7 @@ void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder)
             sName = Format(sFmt, [i+1, sName]);
         }
         Item = CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
+        if (JOBJECT.B["subs"]) Item[mpiSubtitleLanguage] = HmsSubtitlesDirectory+'\\'+Item.ItemID+'.srt';
         FillVideoInfo(Item);
       }
     }
