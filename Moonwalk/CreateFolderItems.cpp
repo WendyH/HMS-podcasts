@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.09.29
+﻿// VERSION = 2017.01.10
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -332,7 +332,7 @@ void CheckPodcastUpdate() {
   
   // Если после последней проверки прошло меньше получаса - валим
   if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
-    Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
+  Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   sData = HmsDownloadURL('https://api.github.com/repos/WendyH/HMS-podcasts/contents/Moonwalk', "Accept-Encoding: gzip, deflate", true);
   JSON  = TJsonObject.Create();
   try {
