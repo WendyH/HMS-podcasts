@@ -1,4 +1,4 @@
-﻿// 2017.09.01
+﻿// 2017.10.08
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -50,6 +50,42 @@ string GetGroupName(string sName) {
   return sGrp;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// Создание ссылки-ошибки
+void ErrorItem(string sMsg) {
+  THmsScriptMediaItem Item = HmsCreateMediaItem('InfoError'+IntToStr(gnTotalItems),FolderItem.ItemID);
+  Item[mpiTitle     ] = sMsg;
+  Item[mpiThumbnail ] = 'http://wonky.lostcut.net/icons/symbol-error.png'; gnTotalItems++;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Авторизация на сайте
+bool Login() {
+  string sUser, sPass, sLink, sData, sPost, sRet, sCookie, sHeaders;
+  int nPort = 443, nFlags = 0x10; // INTERNET_COOKIE_THIRD_PARTY;
+  sHeaders = gsUrlBase+"/\r\n"+
+             "Accept: */*\r\n"+
+             "Origin: "+gsUrlBase+"\r\n"+
+             "X-Requested-With: XMLHttpRequest\r\n"+
+             "User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36\r\n";
+  
+  if ((Trim(mpPodcastAuthorizationUserName)=='') || (Trim(mpPodcastAuthorizationPassword)=='')) {
+    ErrorItem('Не указан логин или пароль');
+    return false;
+  }
+  
+  sUser = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationUserName)); // Логин
+  sPass = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationPassword)); // Пароль
+  sUser = ReplaceStr(sUser, "@", "%2540");
+  sPost = 'login_name='+sUser+'&login_password='+sPass+"&login_not_save=0&login=submit";
+  sData = HmsSendRequestEx('filmix.me', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, sPost, nPort, nFlags, sRet, true);
+  sData = HmsUtf8Decode(sData);
+  if (HmsRegExMatch('AUTH_OK', sData, '')) return true;
+  
+  ErrorItem('Введён неправильный логин или пароль');
+  return false;  
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // --- Создание структуры -----------------------------------------------------
 void CreateVideoFolders() {
@@ -79,7 +115,12 @@ void CreateVideoFolders() {
     
   }
 
-  sHtml  = HmsUtf8Decode(HmsDownloadUrl(mpFilePath)); // Загружаем страницу
+  sHtml = HmsUtf8Decode(HmsDownloadUrl(mpFilePath)); // Загружаем страницу
+
+  if ((Pos("user-profile", sHtml) < 1) && (Trim(mpPodcastAuthorizationUserName)!="")) {
+    if (!Login()) return;
+    sHtml = HmsUtf8Decode(HmsDownloadUrl(mpFilePath));
+  }
   
   // Дозагрузка страниц (если задан шаблон поиска максимального номера сраницы)
   if ((gsPatternPages!='') && HmsRegExMatch(gsPatternPages, sHtml, sVal, 1, PCRE_SINGLELINE)) {
