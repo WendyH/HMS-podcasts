@@ -15,7 +15,7 @@ string    gsTime       = "02:30:00.000";       // Продолжительнос
 string gsPatternBlock = '(<tr>.*?</tr>)';           // Искомые блоки
 string gsCutPage      = '';                         // Обрезка загруженной страницы
 string gsPatternTitle = '<tr>\\s*?(<td.*?</td>)';   // Название
-string gsPatternLink  = '(http:[^\'"]+/iframe)';    // Ссылка
+string gsPatternLink  = '//[^/\'"]+(/[^\'"]+/iframe)'; // Ссылка
 string gsPatternKP    = 'kinopoisk.ru/film/(.*?)/'; // Код фильма на Kinopoisk
 string gsPatternYear  = '<td>(\\d{4})</td>';        // Год
 string gsPatternAudio = '';                         // Озвучка / Перевод
@@ -215,7 +215,10 @@ void LoadAndParse() {
       
       sName = ReplaceStr(HmsHtmlToText(sName), "/", "-");
       sTran = ReplaceStr(HmsHtmlToText(sTran), "/", "-");
-      sLink = HmsExpandLink(sLink, gsUrlBase);
+      if (LeftCopy(sLink, 2)=="//") 
+        sLink = "http:" + Trim(sLink);
+      else
+        sLink = HmsExpandLink(sLink, gsUrlBase);
       if (sTran=='Не указан') sTran = '';
 
       if ((sKPID!='') && (sKPID!='0')) sImg = 'http://www.kinopoisk.ru/images/film/'+sKPID+'.jpg';

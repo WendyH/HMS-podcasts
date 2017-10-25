@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.04.14
+﻿// VERSION = 2017.10.26
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -7,13 +7,12 @@
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 string gsUrlBase="http://moonwalk.co"; int gnTotalItems=0; TDateTime gTimeStart=Now;
 
-
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
 
 ///////////////////////////////////////////////////////////////////////////////
 // Функция создания динамической папки с указанным скриптом
-THmsScriptMediaItem CreateDynamicItem(THmsScriptMediaItem prntItem, char sTitle, char sLink, char &sScript='') {
+THmsScriptMediaItem CreateDynamicItem(THmsScriptMediaItem prntItem, string sTitle, string sLink, string &sScript='') {
   THmsScriptMediaItem Folder = prntItem.AddFolder(sLink, false, 32);
   Folder[mpiTitle     ] = sTitle;
   Folder[mpiCreateDate] = VarToStr(IncTime(Now,0,-prntItem.ChildCount,0,0));
@@ -26,8 +25,8 @@ THmsScriptMediaItem CreateDynamicItem(THmsScriptMediaItem prntItem, char sTitle,
 
 ///////////////////////////////////////////////////////////////////////////////
 // Замена в тексте загруженного скрипта значения текстовой переменной
-void ReplaceVarValue(char &sText, char sVarName, char sNewVal) {
-  char sVal, sVal2;
+void ReplaceVarValue(string &sText, string sVarName, string sNewVal) {
+  string sVal, sVal2;
   if (HmsRegExMatch2("("+sVarName+"\\s*?=.*?';)", sText, sVal, sVal2)) {
     HmsRegExMatch(sVarName+"\\s*?=\\s*?'(.*)'", sVal, sVal2);
     sText = ReplaceStr(sText, sVal, ReplaceStr(sVal , sVal2, sNewVal));
@@ -36,8 +35,8 @@ void ReplaceVarValue(char &sText, char sVarName, char sNewVal) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание папки ПОИСК (с загрузкой скрипта с форума homemediaserver.ru)
-void CreateSearchFolder(THmsScriptMediaItem prntItem, char sTitle) {
-  char sScript='', sLink, sHtml, sRE, sVal; THmsScriptMediaItem Folder;
+void CreateSearchFolder(THmsScriptMediaItem prntItem, string sTitle) {
+  string sScript='', sLink, sHtml, sRE, sVal; THmsScriptMediaItem Folder;
   
   // Да да, загружаем скрипт с сайта форума HMS
   sHtml = HmsUtf8Decode(HmsDownloadURL('http://homemediaserver.ru/forum/viewtopic.php?f=15&t=2793&p=17395#p17395', '', true));
@@ -61,7 +60,7 @@ void CreateSearchFolder(THmsScriptMediaItem prntItem, char sTitle) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание подкаста или папки
-THmsScriptMediaItem CreateItem(THmsScriptMediaItem Parent, char sTitle='', char sLink='') {
+THmsScriptMediaItem CreateItem(THmsScriptMediaItem Parent, string sTitle="", string sLink="", string sImg="") {
   THmsScriptMediaItem Item; bool bForceFolder = false;
 
   if (sLink=='') { sLink = sTitle; bForceFolder = true; }
@@ -71,8 +70,98 @@ THmsScriptMediaItem CreateItem(THmsScriptMediaItem Parent, char sTitle='', char 
   Item[mpiTitle     ] = sTitle;
   Item[mpiCreateDate] = VarToStr(IncTime(gTimeStart,0,-gnTotalItems,0,0));
   Item[mpiFolderSortOrder] = -mpiCreateDate;
+  Item[mpiThumbnail ] = sImg;
   gnTotalItems++;
   return Item;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Получение имени группировки по имени видео (первая буква, "A..Z" или "#")
+string GetGroupName(string sName) {
+  string sGrp = '#';
+  if (HmsRegExMatch('([A-ZА-Я0-9])', sName, sGrp, 1, PCRE_CASELESS)) sGrp = UpperCase(sGrp);
+  if (HmsRegExMatch('[A-Z]', sGrp, sGrp)) sGrp = 'A..Z';
+  if (HmsRegExMatch('[0-9]', sGrp, sGrp)) sGrp = '#';
+  return sGrp;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Создание списка сериалов
+void CreateSeriesList() {
+  string sHtml, sLink, sName, sYear, sKPID, sImg, sVal, sTran, sGroupMode;
+  TRegExpr RE; THmsScriptMediaItem Item, Folder; bool bGroup = false;
+  int i, n, nPages=0, iCnt=0, nGrp=0, nMaxPages=10, nMaxInGroup=100, nMinInGroup=100;
+  
+  // Проверка установленных дополнительных параметров
+  if (HmsRegExMatch('--maxingroup=(\\d+)', mpPodcastParameters, sVal)) nMaxInGroup = StrToInt(sVal);
+  
+  HmsRegExMatch('--group=(\\w+)', mpPodcastParameters, sGroupMode);
+  bool bYearInTitle = (Pos('--yearintitle', mpPodcastParameters)>0);
+
+  sHtml = HmsUtf8Decode(HmsDownloadURL(mpFilePath));
+  if (HmsRegExMatch('(<link.*?>)', sHtml, sVal)) sHtml = ReplaceStr(sHtml, sVal, '');
+  if (HmsRegExMatch('(<meta.*?>)', sHtml, sVal)) sHtml = ReplaceStr(sHtml, sVal, '');
+  
+  nPages = WordCount(sHtml, "\n");
+  i = 0;
+  
+  RE = TRegExpr.Create('(.*?)<br>', PCRE_SINGLELINE);
+  try {
+    if (RE.Search(sHtml)) do {
+      i++; sLink=""; sName=""; sYear=""; sImg=""; sKPID=""; sTran="";
+      
+      if (i % 20) {
+        HmsSetProgress(Int(i / nPages));
+        HmsShowProgress(IntToStr(i)+" из "+IntToStr(nPages));
+      if (HmsCancelPressed) break;
+      }
+  
+      HmsRegExMatch('^(.*?);'          , RE.Match, sName); // Название
+      HmsRegExMatch('src="(.*?)"'      , RE.Match, sLink); // Ссылка
+      HmsRegExMatch('^.*?;(\\d{4})'    , RE.Match, sYear); // Год
+      HmsRegExMatch('^.*?;.*?;(.*?);'  , RE.Match, sKPID); // Код фильма на Kinopoisk
+      HmsRegExMatch('iframe&gt;;(.*?);', RE.Match, sTran); // Озвучка / Перевод
+      
+      if (LeftCopy(sLink, 2)=="//") sLink = "http:"+Trim(sLink);
+      else                          sLink = HmsExpandLink(sLink, gsUrlBase);
+      HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink); // Волшебная заменялка moonwalk.pw на moonwalk.cc
+      
+      sName = Trim(HmsRemoveLineBreaks(HmsHtmlToText(sName)));
+      
+      if (sTran=='Не указан') sTran = '';
+      
+      if ((sKPID!='') && (sKPID!='0')) sImg = 'http://www.kinopoisk.ru/images/film/'+sKPID+'.jpg';
+      
+      if (sTran!='') sName += ' ['+sTran+']';
+      if (bYearInTitle && (sYear!='') && (Pos(sYear, sName)<1)) sName += ' ('+sYear+')';
+      
+      // Контроль группировки (создаём папку с именем группы)
+      if (sGroupMode=='alph') {
+        Folder = FolderItem.AddFolder(GetGroupName(sName), true);
+        Folder[mpiFolderSortOrder] = "mpTitle";
+      } else if (sGroupMode=='year') {
+        Folder = FolderItem.AddFolder(sYear, true);
+        Folder[mpiFolderSortOrder] = "mpTitle";
+        Folder[mpiYear           ] = sYear;
+      } else if (bGroup) {
+        iCnt++; if (iCnt>=nMaxInGroup) { nGrp++; iCnt=0; }
+        Folder = FolderItem.AddFolder(Format('%.2d', [nGrp]), true);
+      }
+      
+      Item = CreateItem(Folder, sName, sLink, sImg);        // Создание папки с фильмом
+      Item[100500] = sKPID;
+      
+    } while (RE.SearchAgain);
+    
+  } finally { RE.Free(); HmsHideProgress(); }
+  
+  // Сортируем в базе данных программы созданные элементы
+  if (sGroupMode=='alph') {
+    FolderItem.Sort('mpTitle');
+    for (i=0; i<FolderItem.ChildCount; i++) FolderItem.ChildItems[i].Sort('mpTitle');
+  } else if (sGroupMode=='year') FolderItem.Sort('-mpYear');
+  
+  HmsLogMessage(1, mpTitle+': Создано ссылок - '+IntToStr(gnTotalItems));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -82,6 +171,11 @@ THmsScriptMediaItem CreateItem(THmsScriptMediaItem Parent, char sTitle='', char 
   THmsScriptMediaItem Folder, Item;
 
   FolderItem.DeleteChildItems();
+  
+  if (RightCopy(mpFilePath, 4)==".txt") {
+    CreateSeriesList();
+    return;
+  }
 
   Folder = CreateItem(FolderItem, '00. Избранное');
   CreateSearchFolder (FolderItem, '01. Поиск');
@@ -101,9 +195,14 @@ THmsScriptMediaItem CreateItem(THmsScriptMediaItem Parent, char sTitle='', char 
   CreateItem(Folder, '2011'     , "/moonwalk/search_as?search_for=film&search_year=2011");
   CreateItem(Folder, '2010'     , "/moonwalk/search_as?search_for=film&search_year=2010");
   
-  Folder = CreateItem(FolderItem, '04. Сериалы', '/tv_show.txt');
+  Folder = FolderItem.AddFolder(gsUrlBase+"/tv_show.txt", true);
+  Folder[mpiTitle            ] = '04. Сериалы';
   Folder[mpiPodcastParameters] = '--group=alph';
   Folder[mpiFolderSortOrder  ] = mpiTitle;
+  
+  //Folder = CreateItem(FolderItem, '04. Сериалы', '/tv_show.txt');
+  //Folder[mpiPodcastParameters] = '--group=alph';
+  //Folder[mpiFolderSortOrder  ] = mpiTitle;
   
   Folder = CreateItem(FolderItem, '05. Аниме', '/anime.txt');
   Folder[mpiPodcastParameters] = '--group=alph';
