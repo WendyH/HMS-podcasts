@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.10.01
+﻿// VERSION = 2017.10.26
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -7,7 +7,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = "http://moonwalk.co"; // База для относительных ссылок
+string    gsUrlBase    = "http://moonwalk.cc"; // База для относительных ссылок
 int       gnTotalItems = 0;                    // Счётчик созданных элементов
 TDateTime gStart       = Now;                  // Время начала запуска скрипта
 string    gsTime       = "02:30:00.000";       // Продолжительность видео
@@ -17,7 +17,7 @@ bool gbUseSerialKPInfo = false;
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
 
-///////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 // Установка переменной Podcast: поиск родительской папки, содержащий скрипт
 THmsScriptMediaItem GetRoot() {
   Podcast = PodcastItem;
@@ -482,7 +482,10 @@ void CreateMoonwallkLinks(string sLink) {
     HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
     sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
   }
-  if (HmsRegExMatch('<iframe[^>]+src="(http.*?)"', sHtml, sLink)) sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
+  if (HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
+    if (LeftCopy(sLink, 2)=="//") sLink = "http:" + Trim(sLink);
+    sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
+  }
   sHtml = HmsRemoveLineBreaks(HmsUtf8Decode(sHtml));
   
   if (Trim(mpSeriesTitle)=='') { PodcastItem[mpiSeriesTitle] = mpTitle; HmsRegExMatch('^(.*?)[\\(\\[]', mpTitle, PodcastItem[mpiSeriesTitle]); }
@@ -545,7 +548,7 @@ void SetInfo(string sHtml, string sPattern, string sName, TStrings INFO) {
 ///////////////////////////////////////////////////////////////////////////////
 // Создание информационных ссылок (Жанр, Страна, Рейтинг и проч.)
 void CreateInfoItems() {
-  string sHtml, sVal, sVal2, sKPID; TStrings INFO;
+  string sHtml, sVal, sVal2, sTime, sKPID, sImg; TStrings INFO;
   if (!HmsRegExMatch('kinopoisk.ru/images/film/(\\d+)', mpThumbnail, sKPID)) return;
   sHtml = HmsDownloadURL('https://www.kinopoisk.ru/film/'+sKPID+'/', 'Referer: http://ivi.ru', true);
   sHtml = HmsRemoveLineBreaks(HmsUtf8Decode(sHtml));
@@ -581,12 +584,13 @@ void CreateInfoItems() {
   }
   SetInfo(sHtml, '(<div[^>]+"description".*?</div>)', 'Описание', INFO);
   
-  if (HmsRegExMatch('(/film/\\d+/video/)\\d+/', sHtml, sVal)) {
-    sVal = 'http://www.kinopoisk.ru'+Trim(sVal);
-    if (Pos('--trailersfolder', mpPodcastParameters) > 0)
-      CreateFolder(PodcastItem, 'Трейлеры', sVal);
+  if (HmsRegExMatch('video_src[^>]+content="[^>"]+file=([^"&]+)', sHtml, sVal)) {
+    HmsRegExMatch('image_src[^>]+href="(.*?)"', sHtml, sImg);
+    if (HmsRegExMatch('video:duration[^>]+content="(\\d+)"', sHtml, sTime))
+      sTime = HmsTimeFormat(StrToInt(sTime))+".000";
     else
-      CreateTrailersLinks(sVal);
+      sTime = "00:03:50.000";
+    CreateMediaItem(PodcastItem, "Трейлер", HmsHttpDecode(sVal), sImg, sTime);
   }
   
   // Создаём выборочно информационные ссылки
@@ -635,7 +639,7 @@ void CreateTrailersLinks(string sLink) {
   if (PodcastItem.IsFolder) {
     PodcastItem.DeleteChildItems();
     
-    if (HmsRegExMatch('^(.*?kinopoisk.ru/film/\\d+/video/)', mpFilePath, '')) {
+    if (HmsRegExMatch('kinopoisk.ru', mpFilePath, '')) {
       CreateTrailersLinks(mpFilePath);
 
     } else {
