@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.01.10
+﻿// VERSION = 2017.10.28
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -284,6 +284,8 @@ void CreateMoonwallkLinks(string sLink) {
   if (Trim(mpSeriesTitle)=='') { FolderItem[mpiSeriesTitle] = mpTitle; HmsRegExMatch('^(.*?)[\\(\\[]', mpTitle, FolderItem[mpiSeriesTitle]); }
   
   if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
+    if (HmsRegExMatch('>([^<]+Error.*?)<', sHtml, sVal)) 
+      CreateMediaItem(FolderItem, sVal, '-err', 'http://wonky.lostcut.net/icons/symbol-error.png', '7');
     HmsLogMessage(2, mpTitle+': Не найдены данные VideoBalancer в iframe.');
     return;    
   }
