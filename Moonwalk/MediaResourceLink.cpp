@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.10.26
+﻿// VERSION = 2017.10.28
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -491,6 +491,8 @@ void CreateMoonwallkLinks(string sLink) {
   if (Trim(mpSeriesTitle)=='') { PodcastItem[mpiSeriesTitle] = mpTitle; HmsRegExMatch('^(.*?)[\\(\\[]', mpTitle, PodcastItem[mpiSeriesTitle]); }
   
   if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
+    if (HmsRegExMatch('>([^<]+Error.*?)<', sHtml, sVal))
+      CreateErrorItem(sVal);
     HmsLogMessage(2, mpTitle+': Не найдены данные VideoBalancer в iframe.');
     return;    
   }
