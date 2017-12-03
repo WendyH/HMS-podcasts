@@ -1,13 +1,15 @@
-﻿// 2017.09.01
+﻿// 2017.12.02
 //////////////////  Получение ссылок на медиа-ресурс   ////////////////////////
 #define mpiSeriesInfo 10323  // Идентификатор для хранения информации о сериях
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = "https://filmix.me";
+string    gsUrlBase    = "http://filmix.cc";
+bool      gbHttps      = (LeftCopy(gsUrlBase, 5)=='https');
 int       gnTime       = 6000;
 int       gnTotalItems = 0;
+int       gnQual       = 0;  // Минимальное качество для отображения
 TDateTime gStart       = Now;
 string    gsSeriesInfo = ''; // Информация о сериях сериала (названия)
 string    gsHeaders = mpFilePath+'\r\n'+
@@ -111,7 +113,7 @@ void AddInfoItem(string sTitle) {
 ///////////////////////////////////////////////////////////////////////////////
 // ---- Создание ссылок на файл(ы) по переданной ссылке (шаблону) -------------
 void CreateVideoLink(THmsScriptMediaItem Folder, string sName, string sLink, bool bSeparateInFolders=false, int nSeason=0, int nEpisode=0) {
-  string sCut, sQualArray, sQual, sFile; int i, nCount; // Объявляем переменные
+  string sCut, sQualArray, sQual, sFile, sVal; int i, nCount; // Объявляем переменные
   
   // Проверяем, есть ли в переданной ссылке шаблон с массивом существующего качества "[720,480,360]"
   if (HmsRegExMatch('\\[(.*?)\\]', sLink, sQualArray)) {
@@ -120,6 +122,11 @@ void CreateVideoLink(THmsScriptMediaItem Folder, string sName, string sLink, boo
     for (i=1; i<=nCount; i++) {
       sQual = ExtractWord(i, sQualArray, ',');     // Получаем очередной индификатор качества
       if (sQual=='') continue;                     // Может быть пропущен, если не указан
+      
+      if ((gnQual!=0) && HmsRegExMatch('(\\d+)', sQual, sVal)) {
+        if (StrToInt(sVal) < gnQual) continue;     // Фильтрация по установленному качеству
+      }
+      
       sFile = ReplaceStr(sLink, sCut, sQual);      // Формируем ссылку на файл, заменяя шаблон на индификатор качества
       if (bSeparateInFolders) {                    // Если был передан флаг "Группировать файлы качества по разным папкам",
         AddMediaItem(Folder, sName, sFile, sQual); // то передаём индификатор качества как имя группы, где будет создана ссылка
@@ -235,8 +242,10 @@ void CreateLinks() {
   };
   HmsRegExMatch('//(.*)', gsUrlBase, sServ);
   
-  //POST https://filmix.me/api/episodes/get?post_id=103435&page=1  // episodes name
-  //POST https://filmix.me/api/torrent/get_last?post_id=103435     // tottent file info
+  if (HmsRegExMatch('--quality=(\\d+)', mpPodcastParameters, sVal)) gnQual = StrToInt(sVal);
+  
+  //POST http://filmix.cc/api/episodes/get?post_id=103435&page=1  // episodes name
+  //POST http://filmix.cc/api/torrent/get_last?post_id=103435     // tottent file info
   
   // -------------------------------------------------
   // Собираем информацию о фильме
@@ -250,11 +259,13 @@ void CreateLinks() {
   if (HmsRegExMatch('(<a[^>]+genre.*?)</div>', sHtml, sVal)) PodcastItem[mpiGenre] = HmsHtmlToText(sVal);
   // -------------------------------------------------
 
-  gsSeriesInfo = HmsSendRequestEx(sServ, '/api/episodes/get', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, 'post_id='+sID, 443, 16, '', true);
+  int nPort = 80; if (gbHttps) nPort = 443;
+
+  gsSeriesInfo = HmsSendRequestEx(sServ, '/api/episodes/get', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, 'post_id='+sID, nPort, 16, '', true);
   
-  HmsRegExMatch("meta_key\\s*=\\s*\\[(.*?)\\]", sHtml, sVal);
+  //HmsRegExMatch("meta_key\\s*=\\s*\\[(.*?)\\]", sHtml, sVal);
   //sKey = getDataPlayer(sVal);
-  sData = HmsSendRequestEx(sServ, '/api/movies/player_data', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, 'post_id='+sID, 443, 16, '', true);
+  sData = HmsSendRequestEx(sServ, '/api/movies/player_data', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, 'post_id='+sID, nPort, 16, sVal, true);
   
   JSON  = TJsonObject.Create();
   try {
