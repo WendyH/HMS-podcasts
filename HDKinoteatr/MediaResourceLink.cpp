@@ -1,4 +1,4 @@
-﻿// 2017.10.01
+﻿// 2017.12.07
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -172,7 +172,7 @@ void GetLink_Moonwalk(string sLink) {
       }
     }
     // Получаем параметры POST запроса
-    if (!HmsRegExMatch('var e=(\\{mw_key.*?\\})', sJsData, sData)) {
+    if (!HmsRegExMatch('var\\s+\\w+=(\\{mw_key.*?\\})', sJsData, sData)) {
       HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса."); 
       return; 
     }
@@ -182,6 +182,7 @@ void GetLink_Moonwalk(string sLink) {
     for (i=0; i < POSTDATA.Count; i++) {
       sVal = POSTDATA.Values[i].AsString;
       if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
+      if (HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) HmsRegExMatch('window\\.'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
       sPost += POSTDATA.Names[i] + "=" + sVal + "&";
     }
 
