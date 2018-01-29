@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.12.07
+﻿// VERSION = 2018.01.29
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -105,7 +105,7 @@ void GetLink_Moonwalk(string sLink) {
   
   string sHeaders = sLink+'\r\n'+
                     'Accept-Encoding: identity\r\n'+
-                    'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:13.0) Gecko/20100101 Firefox/13.0\r\n';
+                    'User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36\r\n';
   
   // Проверка установленных дополнительных параметров
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
@@ -177,13 +177,17 @@ void GetLink_Moonwalk(string sLink) {
       if (HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) HmsRegExMatch('window\\.'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
       sPost += POSTDATA.Names[i] + "=" + sVal + "&";
     }
+    // Get global variable
+    if (HmsRegExMatch2("window\\['(\\w+)'\\]\\s*=\\s*'(\\w+)'", sHtml, sVar, sVal))
+      if (HmsRegExMatch("\\w+\\.(\\w+)\\s*=\\s*\\w+\\[[\"']"+sVar, sJsData, sVar)) 
+        sPost += sVar + "=" + sVal;
 
     sLink = "/manifests/video/"+OPTIONS.S["video_token"]+"/all";
 
     sData = HmsSendRequest(sServ, sLink, 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
     sData = ReplaceStr(HmsJsonDecode(sData), "\\r\\n", "");
     
-  } finally {  JSON.Free; OPTIONS.Free; POSTDATA.Free; }
+  } finally { JSON.Free; OPTIONS.Free; POSTDATA.Free; }
   
   if (bHdsDump && HmsRegExMatch('"manifest_f4m"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
     
@@ -515,8 +519,7 @@ void CreateMoonwallkLinks(string sLink) {
       JARRAY = JSON.A['episodes'];
       for (n=0; n < JARRAY.Length; n++) {
         EPISODE  = JARRAY[n].AsArray;
-        nSeason  = EPISODE.I[0];
-        nEpisode = EPISODE.I[1];
+        nEpisode = JARRAY.I[n];
         sSerie   = Format("%.2d серия", [nEpisode]); // Форматируем номер в два знака
         Item = CreateMediaItem(Folder, sSerie, sLink+'?season='+Str(nSeason)+'&episode='+Str(nEpisode)+'&ref='+sRef, mpThumbnail, gsTime);
         if (JSON.S["subtitles\\master_vtt"]!="") Item[mpiSubtitleLanguage] = HmsSubtitlesDirectory+'\\'+PodcastItem.ItemID+'.srt';
