@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.10.28
+﻿// VERSION = 2018.01.30
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -295,7 +295,6 @@ void CreateMoonwallkLinks(string sLink) {
     HmsRegExMatch("'(.*?)'", JSON.S['ref'], sRef);
     nSeason = 0;
     if (HmsRegExMatch2('^(.*?)\\?season=(\\d+)', sLink, sLink, sVal)) nSeason = StrToInt(sVal);
-    
     // Подсчитываем количество серий и запоминаем в укромном месте
     n = JSON['episodes'].Count; FolderItem[100508] = Str(n);
     JARRAY = JSON.A['seasons'];
@@ -307,10 +306,10 @@ void CreateMoonwallkLinks(string sLink) {
       JARRAY = JSON.A['episodes'];
       for (n=0; n < JARRAY.Length; n++) {
         EPISODE  = JARRAY[n].AsArray;
-        nSeason  = EPISODE.I[0];
-        nEpisode = EPISODE.I[1];
+        nEpisode = JARRAY.I[n];
         sSerie   = Format("%.2d серия", [nEpisode]); // Форматируем номер в два знака
         Item = CreateMediaItem(Folder, sSerie, sLink+'?season='+Str(nSeason)+'&episode='+Str(nEpisode)+'&ref='+sRef, mpThumbnail, gsTime);
+        if (JSON.S["subtitles\\master_vtt"]!="") Item[mpiSubtitleLanguage] = HmsSubtitlesDirectory+'\\'+FolderItem.ItemID+'.srt';
         GetSerialInfo(Item, nSeason, nEpisode);
       }
     } else if (JARRAY != nil) {
@@ -327,6 +326,105 @@ void CreateMoonwallkLinks(string sLink) {
     }
 
   } finally { JSON.Free; }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Создание информационной ссылки
+void CreateInfoItem(string sName, TStrings INFO) {
+  THmsScriptMediaItem Item; string sVal = Trim(INFO.Values[sName]);
+  if ((sVal=="") || (sVal=="-")) return;
+  Item = HmsCreateMediaItem('Info'+IntToStr(FolderItem.ChildCount), FolderItem.ItemID);
+  Item[mpiTitle     ] = sName+': '+sVal;
+  Item[mpiThumbnail ] = 'http://wonky.lostcut.net/vids/info.jpg';
+  Item[mpiTimeLength] = 20;
+  Item[mpiCreateDate] = VarToStr(IncTime(gStart,0,-gnTotalItems,0,0));
+  gnTotalItems++;
+  // ---- Формирование и сохранение текста для отображения видео информации ---
+  string sInfo='';
+  for (int i=0; i<INFO.Count; i++) {
+    sName = INFO.Names[i];
+    if (HmsRegExMatch('(Описание|Жанр|Название|Постер|Трейлер)', sName, '')) continue;
+    sInfo += "<c:#FFC3BD>"+sName+": </c>"+INFO.Values[sName]+" ";
+    if (!HmsRegExMatch('(Год|IMDb)', sName, '')) sInfo += "|";
+  }
+  sInfo = Copy(sInfo, 1, Length(sInfo)-1);
+  
+  TStrings INFOTEXT = TStringList.Create();  
+  INFOTEXT.Values['Poster'] = mpThumbnail;
+  INFOTEXT.Values['Title' ] = INFO.Values['Название'];
+  INFOTEXT.Values['Info'  ] = Trim(sInfo);
+  INFOTEXT.Values['Categ' ] = INFO.Values['Жанр'    ];
+  INFOTEXT.Values['Descr' ] = INFO.Values['Описание'];
+  Item[1001001] = INFOTEXT.Text;
+  INFOTEXT.Free();
+  // ---------------------------------
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SetInfo(string sHtml, string sPattern, string sName, TStrings INFO) {
+  string sVal;
+  if (HmsRegExMatch(sPattern, sHtml, sVal)) {
+    sVal = ReplaceStr(HmsHtmlToText(sVal), '|', '');
+    if ((sVal!='') && (sVal!='-'))
+      INFO.Values[sName] = sVal;
+  } 
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Создание информационных ссылок (Жанр, Страна, Рейтинг и проч.)
+void CreateInfoItems() {
+  string sHtml, sVal, sVal2, sTime, sKPID, sImg; TStrings INFO;
+  if (!HmsRegExMatch('kinopoisk.ru/images/film/(\\d+)', mpThumbnail, sKPID)) return;
+  sHtml = HmsDownloadURL('https://www.kinopoisk.ru/film/'+sKPID+'/', 'Referer: http://ivi.ru', true);
+  sHtml = HmsRemoveLineBreaks(HmsUtf8Decode(sHtml));
+  
+  INFO = TStringList.Create;
+  SetInfo(sHtml, '(<h1.*?</h1>)'           , 'Название', INFO);
+  SetInfo(sHtml, '>год</td>(.*?)</tr>'     , 'Год'     , INFO);
+  SetInfo(sHtml, '>страна</td>(.*?)</tr>'  , 'Страна'  , INFO);
+  SetInfo(sHtml, '>слоган</td>(.*?)</tr>'  , 'Слоган'  , INFO);
+  SetInfo(sHtml, '>режиссер</td>(.*?)</tr>', 'Режиссер', INFO);
+  SetInfo(sHtml, '>сценарий</td>(.*?)</tr>', 'Сценарий', INFO);
+  SetInfo(sHtml, '>продюсер</td>(.*?)</tr>', 'Продюсер', INFO);
+  SetInfo(sHtml, '>оператор</td>(.*?)</tr>', 'Оператор', INFO);
+  SetInfo(sHtml, '>бюджет</td>(.*?)</tr>'  , 'Бюджет'  , INFO);
+  SetInfo(sHtml, '>возраст</td>(.*?)</tr>' , 'Возраст' , INFO);
+  SetInfo(sHtml, '>жанр</td>(.*?)</(span|tr)>', 'Жанр' , INFO);
+  SetInfo(sHtml, '>IMDb:(.*?)</'           , 'IMDb'    , INFO);
+  
+  SetInfo(sHtml, '>сборы в США</td>(.*?)</(a|tr)>'   , 'Сборы в США'   , INFO);
+  SetInfo(sHtml, '>сборы в мире</td>(.*?)</(a|tr)>'  , 'Сборы в мире'  , INFO);
+  SetInfo(sHtml, '>сборы в России</td>(.*?)</(a|tr)>', 'Сборы в России', INFO);
+  SetInfo(sHtml, '>премьера (мир)</td>(.*?)</(a|tr)>', 'Премьера (мир)', INFO);
+  SetInfo(sHtml, '>премьера (РФ)</td>(.*?)</(a|tr)>' , 'Премьера (РФ)' , INFO);
+  
+  if (HmsRegExMatch('"rating_ball">(.*?)</(span|tr)>', sHtml, sVal)) {
+    if (HmsRegExMatch('"ratingCount">(.*?)</(span|tr)>', sHtml, sVal2)) sVal += ' ('+HmsHtmlToText(sVal2)+')';
+    INFO.Values['Рейтинг КП'] = HmsHtmlToText(sVal);
+  }
+  if (HmsRegExMatch('>время</td>(.*?)</tr>', sHtml, sVal)) {
+    if (HmsRegExMatch('(\\d+)\\s*?мин.', sVal, sVal)) {
+      INFO.Values['Продолжительность'] = HmsTimeFormat(StrToInt(sVal) * 60);
+    }
+  }
+  SetInfo(sHtml, '(<div[^>]+"description".*?</div>)', 'Описание', INFO);
+  
+  if (HmsRegExMatch('video_src[^>]+content="[^>"]+file=([^"&]+)', sHtml, sVal)) {
+    HmsRegExMatch('image_src[^>]+href="(.*?)"', sHtml, sImg);
+    if (HmsRegExMatch('video:duration[^>]+content="(\\d+)"', sHtml, sTime))
+      sTime = HmsTimeFormat(StrToInt(sTime))+".000";
+    else
+      sTime = "00:03:50.000";
+    CreateMediaItem(FolderItem, "Трейлер", HmsHttpDecode(sVal), sImg, sTime);
+  }
+  
+  // Создаём выборочно информационные ссылки
+  CreateInfoItem('Страна'    , INFO);
+  CreateInfoItem('Жанр'      , INFO);
+  CreateInfoItem('Режиссер'  , INFO);
+  CreateInfoItem('IMDb'      , INFO);
+  CreateInfoItem('Рейтинг КП', INFO);
+  INFO.Free;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -403,6 +501,9 @@ void CheckMoonwalkFunction() {
   
   if (HmsRegExMatch("/(serial|movie|video)/", mpFilePath, '')) {
     CreateMoonwallkLinks(mpFilePath); // Cоздание ссылок на фильм или сериал
+    if ((Pos('?season', mpFilePath) < 1) && (Pos('--infoitems', mpPodcastParameters) > 0)) {
+      CreateInfoItems();
+    }
   } else {
     LoadAndParse();                   // Запускаем загрузку страниц и создание папок видео
   }
