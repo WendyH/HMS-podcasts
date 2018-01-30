@@ -1,4 +1,4 @@
-﻿// VERSION = 2017.10.26
+﻿// VERSION = 2018.01.30
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -110,10 +110,10 @@ void CreateSeriesList() {
     if (RE.Search(sHtml)) do {
       i++; sLink=""; sName=""; sYear=""; sImg=""; sKPID=""; sTran="";
       
-      if (i % 20) {
-        HmsSetProgress(Int(i / nPages));
+      if (i % 50 == 0) {
+        HmsSetProgress(Int(i / nPages * 100));
         HmsShowProgress(IntToStr(i)+" из "+IntToStr(nPages));
-      if (HmsCancelPressed) break;
+        if (HmsCancelPressed) break;
       }
   
       HmsRegExMatch('^(.*?);'          , RE.Match, sName); // Название
