@@ -1,11 +1,11 @@
-﻿// 2017.12.02
+﻿// 2018.02.23  Collaboration: WendyH, Big Dog, михаил
 //////////////////  Получение ссылок на медиа-ресурс   ////////////////////////
 #define mpiSeriesInfo 10323  // Идентификатор для хранения информации о сериях
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = "http://filmix.cc";
+string    gsUrlBase    = "http://filmix.info";
 bool      gbHttps      = (LeftCopy(gsUrlBase, 5)=='https');
 int       gnTime       = 6000;
 int       gnTotalItems = 0;
@@ -244,8 +244,8 @@ void CreateLinks() {
   
   if (HmsRegExMatch('--quality=(\\d+)', mpPodcastParameters, sVal)) gnQual = StrToInt(sVal);
   
-  //POST http://filmix.cc/api/episodes/get?post_id=103435&page=1  // episodes name
-  //POST http://filmix.cc/api/torrent/get_last?post_id=103435     // tottent file info
+  //POST http://filmix.info/api/episodes/get?post_id=103435&page=1  // episodes name
+  //POST http://filmix.info/api/torrent/get_last?post_id=103435     // tottent file info
   
   // -------------------------------------------------
   // Собираем информацию о фильме
