@@ -1,4 +1,4 @@
-﻿// 2018.02.23  Collaboration: WendyH, Big Dog, михаил
+﻿// 2018.03.02  Collaboration: WendyH, Big Dog, михаил
 //////////////////  Получение ссылок на медиа-ресурс   ////////////////////////
 #define mpiSeriesInfo 10323  // Идентификатор для хранения информации о сериях
 
@@ -13,11 +13,11 @@ int       gnQual       = 0;  // Минимальное качество для �
 TDateTime gStart       = Now;
 string    gsSeriesInfo = ''; // Информация о сериях сериала (названия)
 string    gsHeaders = mpFilePath+'\r\n'+
-                  'Accept: application/json, text/javascript, */*; q=0.01\r\n'+
-                  'Accept-Encoding: identity\r\n'+
-                  'Origin: '+gsUrlBase+'\r\n'+
-                  'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36\r\n'+
-                  'X-Requested-With: XMLHttpRequest\r\n';
+                      'Accept: application/json, text/javascript, */*; q=0.01\r\n'+
+                      'Accept-Encoding: identity\r\n'+
+                      'Origin: '+gsUrlBase+'\r\n'+
+                      'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36\r\n'+
+                      'X-Requested-With: XMLHttpRequest\r\n';
 
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
@@ -62,6 +62,33 @@ string Html5Decode(string sEncoded) {
   return HmsJsonDecode(sDecoded);
   
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// Авторизация на сайте
+bool LoginToFilmix() {
+  string sName, sPass, sLink, sData, sPost, sRet;
+  int nPort = 80, nFlags = 0x10; // INTERNET_COOKIE_THIRD_PARTY;
+  
+  if ((Trim(mpPodcastAuthorizationUserName)=='') ||
+      (Trim(mpPodcastAuthorizationPassword)=='')) {
+    //ErrorItem('Не указан логин или пароль');
+    //return false;
+    return true; // Не включена авторизация - работаем так, без неё.
+  }
+  
+  sName = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationUserName)); // Логин
+  sPass = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationPassword)); // Пароль
+  sPost = 'login_name='+sName+'&login_password='+sPass+'&login_not_save=0&login=submit';
+  sData = HmsSendRequestEx('filmix.info', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, sPost, nPort, nFlags, sRet, true);
+  
+  if (!HmsRegExMatch('AUTH_OK', sData, '')) {
+    ErrorItem('Не прошла авторизация на сайте filmix.info. Неправильный логин/пароль?');
+    return false;  
+  }
+  
+  return true;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // ---- Создание ссылки на видео ----------------------------------------------
 THmsScriptMediaItem AddMediaItem(THmsScriptMediaItem Folder, string sTitle, string sLink, string sGrp='') {
@@ -93,7 +120,7 @@ THmsScriptMediaItem CreateFolder(string sName, string sLink, string sImg='') {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание ссылки-ошибки
-void CreateErrorItem(string sMsg) {
+void ErrorItem(string sMsg) {
   THmsScriptMediaItem Item = HmsCreateMediaItem('Err', PodcastItem.ItemID);
   Item[mpiTitle     ] = sMsg;
   Item[mpiThumbnail ] = 'http://wonky.lostcut.net/icons/symbol-error.png';
@@ -297,7 +324,7 @@ void CreateLinks() {
       }
       
     }
-    if (nCount==0) CreateErrorItem('Видео не доступно');
+    if (nCount==0) ErrorItem('Видео не доступно');
     
   } finally { JSON.Free; }
   
@@ -328,6 +355,7 @@ void CreateLinks() {
 ///////////////////////////////////////////////////////////////////////////////
 {
   if (PodcastItem.IsFolder) {
+    if (!LoginToFilmix()) return;
     // Если это папка, создаём ссылки внутри этой папки
     if (HmsRegExMatch('/pl/', mpFilePath, '')) {
       gsSeriesInfo = PodcastItem[mpiSeriesInfo];
@@ -339,9 +367,11 @@ void CreateLinks() {
     // Если это запустили файл на просмотр, присваиваем MediaResourceLink значение ссылки на видео-файл 
     if (HmsRegExMatch('/(trejlery|trailers)', mpFilePath, '')) {
       gsUserVariable1 =  HmsDownloadURL(mpFilePath, 'Referer: '+mpFilePath, True);
-      HmsRegExMatch('video-link[^>]+value="(.*?)"', gsUserVariable1, mpFilePath);
-      MediaResourceLink = DecodeUppodText(mpFilePath);
-      if (HmsRegExMatch2('(\\[,?(\\w+).*?\\])', MediaResourceLink, gsUserVariable1, gsUserVariable2))
+      if (HmsRegExMatch('video5-link[^>]+value="(.*?)"', gsUserVariable1, mpFilePath))
+        MediaResourceLink = Html5Decode(mpFilePath);
+      else if (HmsRegExMatch('video-link[^>]+value="(.*?)"', gsUserVariable1, mpFilePath))
+        MediaResourceLink = DecodeUppodText(mpFilePath);
+      if (HmsRegExMatch2('(\\[[^\\]]*?(\\w+).*?\\])', MediaResourceLink, gsUserVariable1, gsUserVariable2))
         MediaResourceLink = ReplaceStr(MediaResourceLink, gsUserVariable1, gsUserVariable2);
       
     } else
