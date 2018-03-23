@@ -1,4 +1,4 @@
-﻿// VERSION = 2018.01.30
+﻿// VERSION = 2018.03.23
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -199,6 +199,7 @@ void CreateSeriesList() {
   Folder[mpiTitle            ] = '04. Сериалы';
   Folder[mpiPodcastParameters] = '--group=alph';
   Folder[mpiFolderSortOrder  ] = mpiTitle;
+  Folder[570] = 2; // Наследовать функцию создания лент подкастов
   
   //Folder = CreateItem(FolderItem, '04. Сериалы', '/tv_show.txt');
   //Folder[mpiPodcastParameters] = '--group=alph';

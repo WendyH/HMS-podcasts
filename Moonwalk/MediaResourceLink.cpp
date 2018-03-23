@@ -1,4 +1,4 @@
-﻿// VERSION = 2018.01.29
+﻿// VERSION = 2018.03.22
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -175,12 +175,16 @@ void GetLink_Moonwalk(string sLink) {
       sVal = POSTDATA.Values[i].AsString;
       if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
       if (HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) HmsRegExMatch('window\\.'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
+      if (sVal=="e._mw_adb") sVal="false";
       sPost += POSTDATA.Names[i] + "=" + sVal + "&";
     }
     // Get global variable
-    if (HmsRegExMatch2("window\\['(\\w+)'\\]\\s*=\\s*'(\\w+)'", sHtml, sVar, sVal))
-      if (HmsRegExMatch("\\w+\\.(\\w+)\\s*=\\s*\\w+\\[[\"']"+sVar, sJsData, sVar)) 
+    if (HmsRegExMatch2("window\\['(\\w+)'\\]\\s*=\\s*'(\\w+)'", sHtml, sVar, sVal)) {
+      if (HmsRegExMatch('n\\["(\\w+)"\\]\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
         sPost += sVar + "=" + sVal;
+      if (HmsRegExMatch('n\\.(\\w+)\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
+        sPost += sVar + "=" + sVal;
+    }
 
     sLink = "/manifests/video/"+OPTIONS.S["video_token"]+"/all";
 
