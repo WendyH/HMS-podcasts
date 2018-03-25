@@ -1,4 +1,4 @@
-﻿// 2017.12.07
+﻿// 2018.03.25
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -113,7 +113,7 @@ void GetLink_Moonwalk(string sLink) {
   
   string sHeaders = sLink+'\r\n'+
                     'Accept-Encoding: identity\r\n'+
-                    'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:13.0) Gecko/20100101 Firefox/13.0\r\n';
+                    'User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36\r\n';
   
   // Проверка установленных дополнительных параметров
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
@@ -183,15 +183,25 @@ void GetLink_Moonwalk(string sLink) {
       sVal = POSTDATA.Values[i].AsString;
       if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
       if (HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) HmsRegExMatch('window\\.'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
+      if (sVal=="e._mw_adb") sVal="false";
       sPost += POSTDATA.Names[i] + "=" + sVal + "&";
     }
+    // Get global variable
+    if (HmsRegExMatch2("window\\['(\\w+)'\\]\\s*=\\s*'(\\w+)'", sHtml, sVar, sVal)) {
+      if (HmsRegExMatch('n\\["(\\w+)"\\]\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
+        sPost += sVar + "=" + sVal + "&";
+      if (HmsRegExMatch('n\\.(\\w+)\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
+        sPost += sVar + "=" + sVal + "&";
+    }
+    if (HmsRegExMatch2('getVideoManifests.*?n\\.(\\w+)\\s*=\\s*"(.*?)"', sJsData, sVar, sVal)) 
+      sPost += sVar + "=" + sVal + "&";
 
     sLink = "/manifests/video/"+OPTIONS.S["video_token"]+"/all";
 
     sData = HmsSendRequest(sServ, sLink, 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
     sData = ReplaceStr(HmsJsonDecode(sData), "\\r\\n", "");
     
-  } finally {  JSON.Free; OPTIONS.Free; POSTDATA.Free; }
+  } finally { JSON.Free; OPTIONS.Free; POSTDATA.Free; }
   
   if (bHdsDump && HmsRegExMatch('"manifest_f4m"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
     

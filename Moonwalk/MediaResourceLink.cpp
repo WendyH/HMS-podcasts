@@ -1,4 +1,4 @@
-﻿// VERSION = 2018.03.22
+﻿// VERSION = 2018.03.25
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -181,10 +181,12 @@ void GetLink_Moonwalk(string sLink) {
     // Get global variable
     if (HmsRegExMatch2("window\\['(\\w+)'\\]\\s*=\\s*'(\\w+)'", sHtml, sVar, sVal)) {
       if (HmsRegExMatch('n\\["(\\w+)"\\]\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
-        sPost += sVar + "=" + sVal;
+        sPost += sVar + "=" + sVal + "&";
       if (HmsRegExMatch('n\\.(\\w+)\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
-        sPost += sVar + "=" + sVal;
+        sPost += sVar + "=" + sVal + "&";
     }
+    if (HmsRegExMatch2('getVideoManifests.*?n\\.(\\w+)\\s*=\\s*"(.*?)"', sJsData, sVar, sVal)) 
+      sPost += sVar + "=" + sVal + "&";
 
     sLink = "/manifests/video/"+OPTIONS.S["video_token"]+"/all";
 
