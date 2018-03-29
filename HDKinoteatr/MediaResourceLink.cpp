@@ -1,4 +1,4 @@
-﻿// 2018.03.25
+﻿// 2018.03.30
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -107,13 +107,14 @@ bool GetLink_VK(string sLink) {
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с moonwalk.cc
 void GetLink_Moonwalk(string sLink) {
-  string sHtml, sData, sJsData, sPost, sVer, sQual, sVal, sServ, sVar, sUrlBase;
-  int i; float f; TRegExpr RE; bool bHdsDump, bQualLog;
+  string sHtml, sData, sJsData, sPost, sVer, sQual, sVal, sServ, sVar, sUrlBase, sJSONParams;
+  int i, n; float f; TRegExpr RE; bool bHdsDump, bQualLog;
   TJsonObject JSON, OPTIONS, POSTDATA;
   
+  string sUserAgent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36';
   string sHeaders = sLink+'\r\n'+
                     'Accept-Encoding: identity\r\n'+
-                    'User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36\r\n';
+                    'User-Agent: '+sUserAgent+'\r\n';
   
   // Проверка установленных дополнительных параметров
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
@@ -162,57 +163,59 @@ void GetLink_Moonwalk(string sLink) {
       return; 
     }      
     sJsData = HmsDownloadURL(HmsExpandLink(sVal, sUrlBase), 'Referer: '+sLink);
-    // Устанавливаем дополнительные заголовки и их значения
-    if (HmsRegExMatch('headers:({.*?})', sJsData, sVal)) {
-      JSON.LoadFromString(sVal);
-      for (i=0; i < JSON.Count; i++) {
-        sVal = JSON.Values[i].AsString;
-        if (HmsRegExMatch('this.options.(\\w+)', sVal, sVar)) sVal = OPTIONS.S[sVar];
-        sHeaders += JSON.Names[i] + ": " + sVal + "\r\n";
-      }
-    }
     // Получаем параметры POST запроса
-    if (!HmsRegExMatch('var\\s+\\w+=(\\{mw_key.*?\\})', sJsData, sData)) {
-      HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса."); 
+    if (!HmsRegExMatch('getVideoManifests.*?\\{(.*?\\}\\);)', sJsData, sData)) {
+      HmsLogMessage(2, mpTitle+": Не найдена функция getVideoManifests в скрипте плеера moonwalk."); 
       return; 
     }
-    POSTDATA.LoadFromString(sData);
+    if (!HmsRegExMatch('t\\s*=\\s*({.*?})', sData, sJSONParams)) {
+      HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests."); 
+      return; 
+    }
+    string iv   = "c46b534f9def34b0f2040a503d978eed";
+    string sKey = "617adae21a8aedc4e13938619b62f4ecdd3b947cd64620569df257d333e4f11d";
+    HmsRegExMatch('\\be=[\'"](.*?)[\'"]', sData, sKey);
+    HmsRegExMatch('\\bn=[\'"](.*?)[\'"]', sData, iv  );
+    POSTDATA.LoadFromString(sJSONParams);
     // Формируем данные для POST
-    sPost = "";
-    for (i=0; i < POSTDATA.Count; i++) {
+    sPost = ""; string sData4Encrypt = "{";
+    for (i=POSTDATA.Count-1; i >=0 ; i--) {
       sVal = POSTDATA.Values[i].AsString;
-      if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
-      if (HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) HmsRegExMatch('window\\.'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
-      if (sVal=="e._mw_adb") sVal="false";
-      sPost += POSTDATA.Names[i] + "=" + sVal + "&";
+      if (sVal=="navigator.userAgent") sVal = sUserAgent;
+      else if (Pos("_mw_adb", sVal)>0) sVal = "true";
+      else if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
+      else if (HmsRegExMatch('window\\[[\'"](.*?)[\'"]\\]', sVal, sVar) || HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) {
+        HmsRegExMatch('window\\[[\'"]'+sVar+'[\'"]]\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
+        HmsRegExMatch('window\\.'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
+        HmsRegExMatch('[\'"]'+sVar+'[\'"][^{};,=]+=\\s*[\'"](.*?)[\'"]', sJsData, sVal);
+      }
+      if (sData4Encrypt!="{") sData4Encrypt += ",";
+      if (!TryStrToInt(sVal, n) && (sVal!="true") && (sVal!="false")) sVal = '"'+Trim(sVal)+'"'; // strings value in quotes
+      sData4Encrypt += '"'+POSTDATA.Names[i]+'":'+sVal;
     }
-    // Get global variable
-    if (HmsRegExMatch2("window\\['(\\w+)'\\]\\s*=\\s*'(\\w+)'", sHtml, sVar, sVal)) {
-      if (HmsRegExMatch('n\\["(\\w+)"\\]\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
-        sPost += sVar + "=" + sVal + "&";
-      if (HmsRegExMatch('n\\.(\\w+)\\s*=\\s*\\w+\\["'+sVar, sJsData, sVar)) 
-        sPost += sVar + "=" + sVal + "&";
-    }
-    if (HmsRegExMatch2('getVideoManifests.*?n\\.(\\w+)\\s*=\\s*"(.*?)"', sJsData, sVar, sVal)) 
-      sPost += sVar + "=" + sVal + "&";
+    sData4Encrypt += "}";
+    int padding = 16 - (Length(sData4Encrypt) % 16);
+    for (i=0; i < padding; i++) sData4Encrypt += chr(padding); // PKCS7 Padding
+    sVal  = HmsCryptCipherEncode("Rijndael", sData4Encrypt, HmsHexToString(sKey), HmsHexToString(iv), cmCBCx, "MIME64");
+    sPost = "q="+HmsHttpEncode(sVal);
+    sData = HmsSendRequest(sServ, "/vs", 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
+    sVar  = "";
+    JSON.LoadFromString(sData);
+    bool bMP4 = Pos("--mp4", mpPodcastParameters)>0;
+    if (bMP4 && (JSON.B["mp4" ])) sVar = "mp4" ;
+    else if     (JSON.B["m3u8"])  sVar = "m3u8";
+    sLink = JSON.S[sVar];
+    if (sLink!="") sData = HmsDownloadURL(sLink, "Referer: "+sHeaders, true);
 
-    sLink = "/manifests/video/"+OPTIONS.S["video_token"]+"/all";
-
-    sData = HmsSendRequest(sServ, sLink, 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
-    sData = ReplaceStr(HmsJsonDecode(sData), "\\r\\n", "");
-    
   } finally { JSON.Free; OPTIONS.Free; POSTDATA.Free; }
   
-  if (bHdsDump && HmsRegExMatch('"manifest_f4m"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
-    
-    HDSLink(sLink, sQual);
-    
-  } else if (HmsRegExMatch('"manifest_m3u8"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
-    MediaResourceLink = ' ' + sLink;
+  TStringList QLIST = TStringList.Create();
+  
+  if (sVar=="m3u8") {
+    MediaResourceLink = sLink;
     // Получение длительности видео, если она не установлена
     // ------------------------------------------------------------------------
-    sData = HmsDownloadUrl(sLink, 'Referer: '+sHeaders, true);
-    sVal  = Trim(PodcastItem.ItemOrigin[mpiTimeLength]);
+    sVal = Trim(PodcastItem.ItemOrigin[mpiTimeLength]);
     if ((sVal=='') || (RightCopy(sVal, 6)=='00.000')) {
       if (HmsRegExMatch('(http.*?)[\r\n$]', sData, sLink)) {
         sHtml = HmsDownloadUrl(sLink, 'Referer: '+sHeaders, true);
@@ -228,7 +231,6 @@ void GetLink_Moonwalk(string sLink) {
     // ------------------------------------------------------------------------
     string sSelectedQual = '', sMsg, sHeight; int iMinPriority = 99, iPriority; 
     if ((sQual!='') || (mpPodcastMediaFormats!='')) {
-      TStringList QLIST = TStringList.Create();
       // Собираем список ссылок разного качества
       RE = TRegExpr.Create('#EXT-X-STREAM-INF:RESOLUTION=\\d+x(\\d+).*?[\r\n](http.+)$', PCRE_MULTILINE);
       if (RE.Search(sData)) do {
@@ -242,65 +244,24 @@ void GetLink_Moonwalk(string sLink) {
         }
       } while (RE.SearchAgain());
       RE.Free;
-      QLIST.Sort();
-      if (QLIST.Count > 0) {
-        if      (sQual=='low'   ) sSelectedQual = QLIST.Names[0];
-        else if (sQual=='medium') sSelectedQual = QLIST.Names[Round((QLIST.Count-1) / 2)];
-        else if (sQual=='high'  ) sSelectedQual = QLIST.Names[QLIST.Count - 1];
-        else if (HmsRegExMatch('(\\d+)', sQual, sQual)) {
-          extended minDiff = 999999; // search nearest quality
-          for (i=0; i < QLIST.Count; i++) {
-            extended diff = StrToInt(QLIST.Names[i]) - StrToInt(sQual);
-            if (Abs(diff) < minDiff) {
-              minDiff = Abs(diff);
-              sSelectedQual = QLIST.Names[i];
-            }
-          }
-        }
-      }
-      if (sSelectedQual != '') MediaResourceLink = ' ' + QLIST.Values[sSelectedQual];
-      if (bQualLog) {
-        sMsg = 'Доступное качество: ';
-        for (i = 0; i < QLIST.Count; i++) {
-          if (i>0) sMsg += ', ';
-          sMsg += IntToStr(StrToInt(QLIST.Names[i])); // Обрезаем лидирующие нули
-        }
-        if (sSelectedQual != '') sSelectedQual = IntToStr(StrToInt(sSelectedQual));
-        else sSelectedQual = 'Auto';
-        sMsg += '. Выбрано: ' + sSelectedQual;
-        HmsLogMessage(1, mpTitle+'. '+sMsg);
-      }
-      QLIST.Free;
     }
     // ------------------------------------------------------------------------
     
-  } else if (HmsRegExMatch('"manifest_mp4"\\s*?:\\s*?"(.*?)"', sData, sLink)) {
-    sData = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
-    // Поддержка установленных приоритетов качества в настройках подкаста
+  } else if (sVar=="mp4") {
+    // Составляем список ссылок с разным качеством
     JSON = TJsonObject.Create();
-    int height, selHeight=0, minPriority=99, priority, maxHeight;
-    if (sQual=='medium') sQual='480'; if (sQual=='low') sQual='360';
-    maxHeight = StrToIntDef(sQual, 4320);
     try {
       JSON.LoadFromString(sData);
       for (i=0; i<JSON.Count; i++) {
-        sVer  = JSON.Names[i];
-        sLink = JSON.S[sVer];
-        height = StrToIntDef(sVer, 0);
-        if ((sQual!='') && (sQual==sVer)) { MediaResourceLink = sLink; selHeight = height; break; }
-        if (mpPodcastMediaFormats!='') {
-          priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
-          if ((priority>=0) && (priority<minPriority)) {
-            MediaResourceLink = sLink; minPriority = priority;
-          }
-        } else if ((height > selHeight) && (height <= maxHeight)) {
-          MediaResourceLink = sLink; selHeight = height;
-        }
+        sVer    = JSON.Names[i];
+        sLink   = JSON.S[sVer];
+        sHeight = Format('%.5d', [StrToIntDef(sVer, 0)]);
+        QLIST.Values[sHeight] = sLink;
       }
     } finally { JSON.Free(); }
     
   } else {
-    HmsLogMessage(2, mpTitle+': Ошибка получения данных от new_session.');
+    HmsLogMessage(2, mpTitle+': Ошибка получения данных от сервера moonwalk.');
     if (DEBUG==1) {
       if (ServiceMode) sVal = SpecialFolderPath(0x37); // Общая папака "Видео"
         else           sVal = SpecialFolderPath(0);    // Рабочий стол
@@ -309,6 +270,37 @@ void GetLink_Moonwalk(string sLink) {
       HmsLogMessage(1, mpTitle+': Создан лог файл '+sVal);
     }
   }
+  // Если сформирован список ссылок для разного качества
+  if (QLIST.Count > 0) {
+    QLIST.Sort();
+    if      (sQual=='low'   ) sSelectedQual = QLIST.Names[0];
+    else if (sQual=='medium') sSelectedQual = QLIST.Names[Round((QLIST.Count-1) / 2)];
+    else if (sQual=='high'  ) sSelectedQual = QLIST.Names[QLIST.Count - 1];
+    else if (HmsRegExMatch('(\\d+)', sQual, sQual)) {
+      extended minDiff = 999999; // search nearest quality
+      for (i=0; i < QLIST.Count; i++) {
+        extended diff = StrToInt(QLIST.Names[i]) - StrToInt(sQual);
+        if (Abs(diff) < minDiff) {
+          minDiff = Abs(diff);
+          sSelectedQual = QLIST.Names[i];
+        }
+      }
+    }
+  }
+  if (sSelectedQual != '') MediaResourceLink = QLIST.Values[sSelectedQual];
+  if (bQualLog) {
+    sMsg = 'Доступное качество: ';
+    for (i = 0; i < QLIST.Count; i++) {
+      if (i>0) sMsg += ', ';
+      sMsg += IntToStr(StrToInt(QLIST.Names[i])); // Обрезаем лидирующие нули
+    }
+    if (sSelectedQual != '') sSelectedQual = IntToStr(StrToInt(sSelectedQual));
+    else sSelectedQual = 'Auto';
+    sMsg += '. Выбрано: ' + sSelectedQual;
+    HmsLogMessage(1, mpTitle+'. '+sMsg);
+  }
+  QLIST.Free;
+  if (sVar=="m3u8") MediaResourceLink = " "+Trim(MediaResourceLink);
 } // Конец функции поулчения ссылки с moonwalk.cc
 
 ///////////////////////////////////////////////////////////////////////////////
