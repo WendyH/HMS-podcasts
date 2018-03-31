@@ -1,4 +1,4 @@
-﻿// 2017.10.01
+﻿// 2018.03.31
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -6,7 +6,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase     = "http://hdkinoteatr.com"; 
 int       gnTotalItems  = 0; 
 TDateTime gStart        = Now;
 string    gsAPIUrl      = "http://api.lostcut.net/hdkinoteatr/";

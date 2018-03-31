@@ -1,5 +1,5 @@
-﻿// 2018.03.30
-////////////////////////  Создание  списка  видео   ///////////////////////////
+﻿// 2018.03.31
+////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
 #define DEBUG 0
@@ -7,7 +7,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase     = "http://hdkinoteatr.com"; 
 int       gnTotalItems  = 0; 
 TDateTime gStart        = Now;
 string    gsAPIUrl      = "http://api.lostcut.net/hdkinoteatr/";
@@ -140,8 +139,14 @@ void GetLink_Moonwalk(string sLink) {
 
     // Ищем значения параметров (this.options)
     if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
-      HmsLogMessage(2, mpTitle+": Не найдены данные VideoBalancer в iframe."); 
-      return;    
+      if (HmsRegExMatch3("//.*?/(.*?)/(.*?)/[^?]+\\??(.*)", sLink, sVer, sVal, sData))
+        sHtml = HmsDownloadURL("http://api.lostcut.net/?action=moonhtml&t="+sVer+"&i="+sVal+"&p="+HmsHttpEncode(sData), 'Referer: '+sHeaders);
+      if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
+        sVal = "Не найдены данные VideoBalancer в iframe.";
+        if (HmsRegExMatch("<div[^>]+absolute.*?</div>", sHtml, sVal, 0, PCRE_SINGLELINE)) sVal = HmsRemoveLineBreaks(HmsHtmlToText(sVal, 65001));
+        HmsLogMessage(2, mpTitle+": "+sVal); 
+        return;    
+      }
     }
 
     OPTIONS.LoadFromString(sData);
@@ -602,7 +607,7 @@ bool VideoPreview() {
     if ((sID!='') && (sID!='0'))
       sPoster = 'https://st.kp.yandex.net/images/film_iphone/iphone360_'+sID+'.jpg';
     else 
-      sPoster = HmsExpandLink(JINFO.S['image'], gsUrlBase);
+      sPoster = HmsExpandLink(JINFO.S['image'], "http://hdkinoteatr.com");
     sData = 'country|Страна;year|Год;director|Режиссер;producer|Продюссер;scenarist|Сценарист;composer|Композитор;premiere|Премьера (мир);premiere_rf|Премьера (РФ);budget|Бюджет;actors|В ролях';
     sInfo = '';
     for (i=1; i<=WordCount(sData, ';'); i++) {
@@ -755,6 +760,8 @@ void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder)
       sLink = JOBJECT.S["file"   ];
       sName = JOBJECT.S["comment"];
       sImg  = JOBJECT.S["image"  ]; if (sImg=='') sImg = mpThumbnail;
+      sLink = ReplaceStr(sLink, "moon.hdkinoteatr.com", "moonwalk.cc");
+
       if (sName=='Фильм') sName = mpTitle;
       if ((Pos('/serial/', sLink)>0) && (Pos('episode', sLink)<1))
         CreateFolder(Folder, sName, sLink, sImg);
@@ -855,6 +862,8 @@ void CreateLinks() {
     gnDefaultTime = VIDEO.I['time'];
     sLink = VIDEO.S['link'];
     sName = VIDEO.S['name'];
+    sLink = ReplaceStr(sLink, "moon.hdkinoteatr.com", "moonwalk.cc");
+    
     if (HmsRegExMatch('(\\[|\\{)', sLink, '')) {
       sLink = ReplaceStr(sLink, "episode=", "e="); // Если это ссылки на сериалы, то создавать папки
       PLAYLIST.LoadFromString(sLink);
@@ -916,6 +925,7 @@ void SearchAndPlayVideoByKPid() {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка ссылки на известные нам ресурсы видео и получение ссылки на поток
 void GetLink() {
+  mpFilePath = ReplaceStr(mpFilePath, "moon.hdkinoteatr.com", "moonwalk.cc");
   if (HmsRegExMatch('(vk.com|vkontakte.ru)', mpFilePath, '')) {
     GetLink_VK(mpFilePath);
 
