@@ -1,11 +1,11 @@
-﻿// 2018.03.02  Collaboration: WendyH, Big Dog, михаил
+﻿// 2018.04.04  Collaboration: WendyH, Big Dog, михаил
 //////////////////  Получение ссылок на медиа-ресурс   ////////////////////////
 #define mpiSeriesInfo 10323  // Идентификатор для хранения информации о сериях
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = "http://filmix.info";
+string    gsUrlBase    = "http://filmix.nl";
 bool      gbHttps      = (LeftCopy(gsUrlBase, 5)=='https');
 int       gnTime       = 6000;
 int       gnTotalItems = 0;
@@ -79,10 +79,10 @@ bool LoginToFilmix() {
   sName = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationUserName)); // Логин
   sPass = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationPassword)); // Пароль
   sPost = 'login_name='+sName+'&login_password='+sPass+'&login_not_save=0&login=submit';
-  sData = HmsSendRequestEx('filmix.info', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, sPost, nPort, nFlags, sRet, true);
+  sData = HmsSendRequestEx('filmix.nl', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, sPost, nPort, nFlags, sRet, true);
   
   if (!HmsRegExMatch('AUTH_OK', sData, '')) {
-    ErrorItem('Не прошла авторизация на сайте filmix.info. Неправильный логин/пароль?');
+    ErrorItem('Не прошла авторизация на сайте filmix.nl. Неправильный логин/пароль?');
     return false;  
   }
   
@@ -271,8 +271,8 @@ void CreateLinks() {
   
   if (HmsRegExMatch('--quality=(\\d+)', mpPodcastParameters, sVal)) gnQual = StrToInt(sVal);
   
-  //POST http://filmix.info/api/episodes/get?post_id=103435&page=1  // episodes name
-  //POST http://filmix.info/api/torrent/get_last?post_id=103435     // tottent file info
+  //POST http://filmix.nl/api/episodes/get?post_id=103435&page=1  // episodes name
+  //POST http://filmix.nl/api/torrent/get_last?post_id=103435     // tottent file info
   
   // -------------------------------------------------
   // Собираем информацию о фильме
