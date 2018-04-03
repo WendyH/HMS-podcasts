@@ -1,4 +1,4 @@
-﻿// 2018.03.31
+﻿// 2018.04.04
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -145,6 +145,10 @@ void GetLink_Moonwalk(string sLink) {
         sVal = "Не найдены данные VideoBalancer в iframe.";
         if (HmsRegExMatch("<div[^>]+absolute.*?</div>", sHtml, sVal, 0, PCRE_SINGLELINE)) sVal = HmsRemoveLineBreaks(HmsHtmlToText(sVal, 65001));
         HmsLogMessage(2, mpTitle+": "+sVal); 
+        // Заглушка
+        sVal  = ExtractWord(Round(Random*2)+1, "wZ5JJ1CRWdO0,IRcEgNmu9AUn,ebxWWiOq6VbO", ",");
+        sData = HmsDownloadURL("https://studio.stupeflix.com/v/"+sVal+"/", sHeaders, true);
+        HmsRegExMatch('"(http[^>"]+\\.mp4)', sData, MediaResourceLink);
         return;    
       }
     }
@@ -187,7 +191,7 @@ void GetLink_Moonwalk(string sLink) {
     for (i=POSTDATA.Count-1; i >=0 ; i--) {
       sVal = POSTDATA.Values[i].AsString;
       if (sVal=="navigator.userAgent") sVal = sUserAgent;
-      else if (Pos("_mw_adb", sVal)>0) sVal = "true";
+      else if (Pos("_mw_adb", sVal)>0) sVal = "false";
       else if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
       else if (HmsRegExMatch('window\\[[\'"](.*?)[\'"]\\]', sVal, sVar) || HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) {
         HmsRegExMatch('window\\[[\'"]'+sVar+'[\'"]]\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);

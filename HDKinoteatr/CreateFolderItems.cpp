@@ -1,4 +1,4 @@
-﻿// 2018.03.31
+﻿// 2018.04.04
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -227,6 +227,8 @@ void CreateVideosList(string sParams='') {
   bool bYearInTitle = Pos('--yearintitle', mpPodcastParameters) > 0; // Добавлять год к названию
   bool bNoFolders   = Pos('--nofolders'  , mpPodcastParameters) > 0; // Режим "без папкок" для фильмов
   bool bNumetare    = Pos('--numerate'   , mpPodcastParameters) > 0; // Нумеровать созданные ссылки
+  bool bAdd2NameKP  = Pos('--kpinname'   , mpPodcastParameters) > 0; // Добавлять рейтинг Кинопоиск к названию
+  bool bAdd2NameIMDb= Pos('--imdbinname' , mpPodcastParameters) > 0; // Добавлять рейтинг IMDb к названию
   HmsRegExMatch('--group=(\\w+)', mpPodcastParameters, sGroupKey);   // Режим группировки
   if (HmsRegExMatch('--maxingroup=(\\d+)', mpPodcastParameters, sVal)) nMaxInGroup = StrToInt(sVal);
   if (HmsRegExMatch('--miningroup=(\\d+)', mpPodcastParameters, sVal)) nMinInGroup = StrToInt(sVal);
@@ -277,6 +279,14 @@ void CreateVideosList(string sParams='') {
       if (Trim(sGrp)!="") Folder = CreateFolder(FolderItem, sGrp, sGrp);
       
       if (bNoFolders && !VIDEO.B['isserial']) {
+        HmsRegExMatch("(http[^\"']+)", HmsJsonDecode(VIDEO.S['link']), sLink);
+        sLink = ReplaceStr(sLink, "moon.hdkinoteatr.com", "moonwalk.cc");
+        if (bAdd2NameKP && VIDEO.B['rating_kp']) {
+          sName += " КП: "+VIDEO.S['rating_kp'];
+        }
+        if (bAdd2NameIMDb && VIDEO.B['rating_imdb']) {
+          sName += " IMDb: "+VIDEO.S['rating_imdb'];
+        }
         Item = CreateMediaItem(Folder, sName, sLink, sImg, nTime);
         Item[mpiYear    ] = VIDEO.I['year'     ];
         Item[mpiGenre   ] = VIDEO.S['genre'    ];
