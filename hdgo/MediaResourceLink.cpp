@@ -1,5 +1,5 @@
-﻿// 2018.03.24
-///////////////////////  Создание структуры подкаста  /////////////////////////
+﻿// 2018.05.12
+////////////////////  Получение ссылки на медиа-ресурс  ///////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -435,11 +435,11 @@ void CreateInfoLinks() {
 ///////////////////////////////////////////////////////////////////////////////
 string LoadHdgoHtml(string sLink, string &sReferer) {
   string sHtml; HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
-  sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.club");
+  sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.cc");
   if (HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
     if (LeftCopy(sLink, 2)=="//") sLink = "http:"+Trim(sLink);
     HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
-    sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.club");
+    sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.cc");
   }
   if (!HmsRegExMatch("url:\\s*'http", sHtml, '') && HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
     if (LeftCopy(sLink, 2)=="//") sLink = "http:"+Trim(sLink);

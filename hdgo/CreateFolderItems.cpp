@@ -1,5 +1,5 @@
-﻿// 2018.03.24
-///////////////////////  Создание структуры подкаста  /////////////////////////
+﻿// 2018.05.12
+///////////////////////  Обновление списка подкаста  //////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -169,11 +169,11 @@ void CreateHdgoLinks(string sLink) {
 ///////////////////////////////////////////////////////////////////////////////
 string LoadHdgoHtml(string sLink, string &sReferer) {
   string sHtml; HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
-  sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.club");
+  sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.cc");
   if (HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
     if (LeftCopy(sLink, 2)=="//") sLink = "http:"+Trim(sLink);
     HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
-    sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.club");
+    sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.cc");
   }
   if (!HmsRegExMatch("url:\\s*'http", sHtml, '') && HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
     if (LeftCopy(sLink, 2)=="//") sLink = "http:"+Trim(sLink);
@@ -275,7 +275,7 @@ void CreateVideosList(string sParams="") {
     for (i=0; i<JARRAY.Length; i++) {
       VIDEO = JARRAY[i]; sImg='';
       sName = VIDEO.S['name'];
-      sLink = "http://hdgo.club/video/"+gsToken+"/"+VIDEO.S['id']+"/";
+      sLink = "http://hdgo.cc/video/"+gsToken+"/"+VIDEO.S['id']+"/";
       sYear = VIDEO.S['year'];
       sKPID = VIDEO.S['kpid'];
       sName = HmsJsonDecode(sName);
@@ -345,7 +345,7 @@ void CheckPodcastUpdate() {
       if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
         if (sData=='') continue;                                                     // Если не получилось загрузить, пропускаем
-        Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
+          Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
         Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
         Podcast[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
         HmsLogMessage(1, Podcast[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
