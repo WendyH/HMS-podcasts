@@ -1,11 +1,11 @@
-﻿// 2018.04.04  Collaboration: WendyH, Big Dog, михаил
+﻿// 2018.06.07  Collaboration: WendyH, Big Dog, михаил
 //////////////////  Получение ссылок на медиа-ресурс   ////////////////////////
 #define mpiSeriesInfo 10323  // Идентификатор для хранения информации о сериях
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = "http://filmix.nl";
+string    gsUrlBase    = "https://filmix.cool";
 bool      gbHttps      = (LeftCopy(gsUrlBase, 5)=='https');
 int       gnTime       = 6000;
 int       gnTotalItems = 0;
@@ -13,6 +13,7 @@ int       gnQual       = 0;  // Минимальное качество для �
 TDateTime gStart       = Now;
 string    gsSeriesInfo = ''; // Информация о сериях сериала (названия)
 string    gsHeaders = mpFilePath+'\r\n'+
+                      ':authority: filmix.cool\r\n'+
                       'Accept: application/json, text/javascript, */*; q=0.01\r\n'+
                       'Accept-Encoding: identity\r\n'+
                       'Origin: '+gsUrlBase+'\r\n'+
@@ -67,7 +68,7 @@ string Html5Decode(string sEncoded) {
 // Авторизация на сайте
 bool LoginToFilmix() {
   string sName, sPass, sLink, sData, sPost, sRet;
-  int nPort = 80, nFlags = 0x10; // INTERNET_COOKIE_THIRD_PARTY;
+  int nPort = 443, nFlags = 0x10; // INTERNET_COOKIE_THIRD_PARTY;
   
   if ((Trim(mpPodcastAuthorizationUserName)=='') ||
       (Trim(mpPodcastAuthorizationPassword)=='')) {
@@ -79,10 +80,10 @@ bool LoginToFilmix() {
   sName = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationUserName)); // Логин
   sPass = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationPassword)); // Пароль
   sPost = 'login_name='+sName+'&login_password='+sPass+'&login_not_save=0&login=submit';
-  sData = HmsSendRequestEx('filmix.nl', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, sPost, nPort, nFlags, sRet, true);
+  sData = HmsSendRequestEx('filmix.cool', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, sPost, nPort, nFlags, sRet, true);
   
   if (!HmsRegExMatch('AUTH_OK', sData, '')) {
-    ErrorItem('Не прошла авторизация на сайте filmix.nl. Неправильный логин/пароль?');
+    ErrorItem('Не прошла авторизация на сайте filmix.cool. Неправильный логин/пароль?');
     return false;  
   }
   
@@ -271,8 +272,8 @@ void CreateLinks() {
   
   if (HmsRegExMatch('--quality=(\\d+)', mpPodcastParameters, sVal)) gnQual = StrToInt(sVal);
   
-  //POST http://filmix.nl/api/episodes/get?post_id=103435&page=1  // episodes name
-  //POST http://filmix.nl/api/torrent/get_last?post_id=103435     // tottent file info
+  //POST https://filmix.cool/api/episodes/get?post_id=103435&page=1  // episodes name
+  //POST https://filmix.cool/api/torrent/get_last?post_id=103435     // tottent file info
   
   // -------------------------------------------------
   // Собираем информацию о фильме
@@ -341,10 +342,7 @@ void CreateLinks() {
     if (HmsRegExMatch('(Жанр:</span>.*?)</div'      , sHtml, sName)) AddInfoItem(HmsHtmlToText(sName));
     if (HmsRegExMatch('(<div[^>]+translate.*?)</div', sHtml, sName)) AddInfoItem(HmsHtmlToText(sName));
     if (HmsRegExMatch('(<div[^>]+quality.*?)</div'  , sHtml, sName)) AddInfoItem(HmsHtmlToText(sName));
-    if (HmsRegExMatch2('<span[^>]+kinopoisk.*?<div.*?>(.*?)</div>.*?<div.*?>(.*?)</div>', sHtml, sName, sVal)) {
-      if ((sName!='-') && (sName!='0')) AddInfoItem("КП: "+sName+" ("+sVal+")");
-    }
-    if (HmsRegExMatch2('<span[^>]+imdb.*?<div.*?>(.*?)</div>.*?<div.*?>(.*?)</div>', sHtml, sName, sVal)) {
+    if (HmsRegExMatch2('<span[^>]+imdb.*?<p>(.*?)</p>.*?<p>(.*?)</p>', sHtml, sName, sVal)) {
       if ((sName!='-') && (sName!='0')) AddInfoItem("IMDB: "+sName+" ("+sVal+")");
     }
   }

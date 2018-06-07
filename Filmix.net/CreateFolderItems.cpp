@@ -1,10 +1,10 @@
-﻿// 2018.04.04  Collaboration: WendyH, Big Dog, михаил
+﻿// 2018.06.07  Collaboration: WendyH, Big Dog, михаил
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = 'http://filmix.nl';   // Url база ссылок нашего сайта
+string    gsUrlBase    = 'https://filmix.cool'; // Url база ссылок нашего сайта
 bool      gbHttps      = (LeftCopy(gsUrlBase, 5)=='https');
 int       gnTotalItems = 0;                    // Количество созданных элементов
 TDateTime gStart       = Now;                  // Время запуска скрипта
@@ -81,7 +81,7 @@ bool Login() {
   sPass = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationPassword)); // Пароль
   sUser = ReplaceStr(sUser, "@", "%2540");
   sPost = 'login_name='+sUser+'&login_password='+sPass+"&login_not_save=0&login=submit";
-  sData = HmsSendRequestEx('filmix.nl', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, sPost, nPort, nFlags, sRet, true);
+  sData = HmsSendRequestEx('filmix.cool', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, sPost, nPort, nFlags, sRet, true);
   sData = HmsUtf8Decode(sData);
   if (HmsRegExMatch('AUTH_OK', sData, '')) return true;
   
@@ -129,7 +129,7 @@ void CreateVideoFolders() {
     gsPatternTitle = '(<div[^>]+name.*?</div>)'; // Название
   }
   
-  if (bPost) sHtml = HmsUtf8Decode(HmsSendRequestEx("filmix.nl", "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8", sHeaders, mpFilePath, nPort, 0x10,sVal,true));
+  if (bPost) sHtml = HmsUtf8Decode(HmsSendRequestEx("filmix.cool", "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8", sHeaders, mpFilePath, nPort, 0x10,sVal,true));
   else       sHtml = HmsUtf8Decode(HmsDownloadUrl(mpFilePath)); // Загружаем страницу
   
   if ((Pos("user-profile", sHtml) < 1) && (Trim(mpPodcastAuthorizationUserName)!="") && !bPost) {
@@ -149,7 +149,7 @@ void CreateVideoFolders() {
     sLink = mpFilePath + ReplaceStr(gsPagesParam, '<PN>', Str(i));
     if (bPost) {
       if (HmsRegExMatch('(&?search_start=\\d+)', mpFilePath, sVal)) mpFilePath = ReplaceStr(mpFilePath, sVal, "");
-      sHtml += HmsUtf8Decode(HmsSendRequestEx("filmix.nl", "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8",sHeaders,sLink,nPort,0x10,sVal,true));
+      sHtml += HmsUtf8Decode(HmsSendRequestEx("filmix.cool", "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8",sHeaders,sLink,nPort,0x10,sVal,true));
     } else {
       sHtml += HmsUtf8Decode(HmsDownloadUrl(sLink)); // Загружаем страницу
     }
