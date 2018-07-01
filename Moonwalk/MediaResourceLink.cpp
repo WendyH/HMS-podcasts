@@ -1,4 +1,4 @@
-﻿// VERSION = 2018.03.30
+﻿// VERSION = 2018.07.01
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -132,8 +132,18 @@ void GetLink_Moonwalk(string sLink) {
 
     // Ищем значения параметров (this.options)
     if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
-      HmsLogMessage(2, mpTitle+": Не найдены данные VideoBalancer в iframe."); 
-      return;    
+      if (HmsRegExMatch3("//.*?/(.*?)/(.*?)/[^?]+\\??(.*)", sLink, sVer, sVal, sData))
+        sHtml = HmsDownloadURL("http://api.lostcut.net/?action=moonhtml&t="+sVer+"&i="+sVal+"&p="+HmsHttpEncode(sData), 'Referer: '+sHeaders);
+      if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
+        sVal = "Не найдены данные VideoBalancer в iframe.";
+        if (HmsRegExMatch("<div[^>]+absolute.*?</div>", sHtml, sVal, 0, PCRE_SINGLELINE)) sVal = HmsRemoveLineBreaks(HmsHtmlToText(sVal, 65001));
+        HmsLogMessage(2, mpTitle+": "+sVal); 
+        // Заглушка
+        sVal  = ExtractWord(Round(Random*2)+1, "wZ5JJ1CRWdO0,IRcEgNmu9AUn,ebxWWiOq6VbO", ",");
+        sData = HmsDownloadURL("https://studio.stupeflix.com/v/"+sVal+"/", sHeaders, true);
+        HmsRegExMatch('"(http[^>"]+\\.mp4)', sData, MediaResourceLink);
+        return;    
+      }
     }
 
     OPTIONS.LoadFromString(sData);
@@ -164,17 +174,18 @@ void GetLink_Moonwalk(string sLink) {
       HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests."); 
       return; 
     }
-    string iv   = "c46b534f9def34b0f2040a503d978eed";
+    string iv   = "e080ee12a6b39ad18309bc89d5097b77";
     string sKey = "617adae21a8aedc4e13938619b62f4ecdd3b947cd64620569df257d333e4f11d";
     HmsRegExMatch('\\be=[\'"](.*?)[\'"]', sData, sKey);
-    HmsRegExMatch('\\bn=[\'"](.*?)[\'"]', sData, iv  );
+    //HmsRegExMatch('\\bn=[\'"](.*?)[\'"]', sData, iv  );
+    sKey = "7316d0c4"+Trim(sKey); // snx 2 spell!
     POSTDATA.LoadFromString(sJSONParams);
     // Формируем данные для POST
     sPost = ""; string sData4Encrypt = "{";
     for (i=POSTDATA.Count-1; i >=0 ; i--) {
       sVal = POSTDATA.Values[i].AsString;
       if (sVal=="navigator.userAgent") sVal = sUserAgent;
-      else if (Pos("_mw_adb", sVal)>0) sVal = "true";
+      else if (Pos("_mw_adb", sVal)>0) sVal = "false";
       else if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
       else if (HmsRegExMatch('window\\[[\'"](.*?)[\'"]\\]', sVal, sVar) || HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) {
         HmsRegExMatch('window\\[[\'"]'+sVar+'[\'"]]\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
