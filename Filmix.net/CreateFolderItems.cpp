@@ -1,10 +1,10 @@
-﻿// 2018.06.07  Collaboration: WendyH, Big Dog, михаил
+﻿// 2018.07.01  Collaboration: WendyH, Big Dog, михаил
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = 'https://filmix.cool'; // Url база ссылок нашего сайта
+string    gsUrlBase    = ''; // Url база ссылок нашего сайта (берётся из корневого элемента)
 bool      gbHttps      = (LeftCopy(gsUrlBase, 5)=='https');
 int       gnTotalItems = 0;                    // Количество созданных элементов
 TDateTime gStart       = Now;                  // Время запуска скрипта
@@ -62,8 +62,8 @@ void ErrorItem(string sMsg) {
 //////////////////////////////////////////////////////////////////////////////
 // Авторизация на сайте
 bool Login() {
-  string sUser, sPass, sLink, sData, sPost, sRet, sCookie, sHeaders;
-
+  string sUser, sPass, sLink, sData, sPost, sRet, sCookie, sHeaders, sDomen;
+  HmsRegExMatch('//([^/]+)', gsUrlBase, sDomen);
   int nPort  = 80; if (gbHttps) nPort = 443;
   int nFlags = 0x10; // INTERNET_COOKIE_THIRD_PARTY;
   sHeaders = gsUrlBase+"/\r\n"+
@@ -81,7 +81,7 @@ bool Login() {
   sPass = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationPassword)); // Пароль
   sUser = ReplaceStr(sUser, "@", "%2540");
   sPost = 'login_name='+sUser+'&login_password='+sPass+"&login_not_save=0&login=submit";
-  sData = HmsSendRequestEx('filmix.cool', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, sPost, nPort, nFlags, sRet, true);
+  sData = HmsSendRequestEx(sDomen, '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, sPost, nPort, nFlags, sRet, true);
   sData = HmsUtf8Decode(sData);
   if (HmsRegExMatch('AUTH_OK', sData, '')) return true;
   
@@ -92,9 +92,10 @@ bool Login() {
 ///////////////////////////////////////////////////////////////////////////////
 // --- Создание структуры -----------------------------------------------------
 void CreateVideoFolders() {
-  string sHtml, sData, sName, sLink, sImg, sYear, sVal, sGroupingKey='none', sGrp; 
+  string sHtml, sData, sName, sLink, sImg, sYear, sVal, sGroupingKey='none', sGrp, sDomen; 
   int i, nPages, nMaxInGroup, iCnt, nGrp; TRegExpr RegEx; bool bPost; // Объявляем переменные
   THmsScriptMediaItem Folder = FolderItem; string sHeaders;
+  HmsRegExMatch('//([^/]+)', gsUrlBase, sDomen);
   sHeaders = gsUrlBase+"\r\n"+
              "Origin: "+gsUrlBase+"\r\n"+
              "User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36\r\n"+
@@ -117,7 +118,7 @@ void CreateVideoFolders() {
     gsPatternPages = '.*list_submit2\\((\\d+)';
     gsPagesParam   = '&search_start=<PN>';
     bPost  = true;
-  } else if (LeftCopy(mpFilePath, 4)!='http') {
+  } else if ((LeftCopy(mpFilePath, 4)!='http')&&(LeftCopy(mpFilePath, 1)!='/')) {
     HmsUtf8Decode(HmsDownloadUrl(gsUrlBase)); // для установки кук
     // Если в поле "Ссылка" нет реальной ссылки, то делаем ссылку сами - будем искать наименование
     mpFilePath = 'scf=fx&search_start=0&do=search&subaction=search&years_ot=1902&years_do=2018&kpi_ot=1&kpi_do=10&imdb_ot=1&imdb_do=10&sort_name=&undefined=asc&sort_date=&sort_favorite=&simple=1&story='+HmsHttpEncode(HmsUtf8Encode(mpTitle));
@@ -128,8 +129,9 @@ void CreateVideoFolders() {
     gsPatternBlock = '(class="film".*?</div>)';
     gsPatternTitle = '(<div[^>]+name.*?</div>)'; // Название
   }
+  if (!bPost) mpFilePath = HmsExpandLink(mpFilePath, gsUrlBase);
   
-  if (bPost) sHtml = HmsUtf8Decode(HmsSendRequestEx("filmix.cool", "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8", sHeaders, mpFilePath, nPort, 0x10,sVal,true));
+  if (bPost) sHtml = HmsUtf8Decode(HmsSendRequestEx(sDomen, "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8", sHeaders, mpFilePath, nPort, 0x10,sVal,true));
   else       sHtml = HmsUtf8Decode(HmsDownloadUrl(mpFilePath)); // Загружаем страницу
   
   if ((Pos("user-profile", sHtml) < 1) && (Trim(mpPodcastAuthorizationUserName)!="") && !bPost) {
@@ -149,7 +151,7 @@ void CreateVideoFolders() {
     sLink = mpFilePath + ReplaceStr(gsPagesParam, '<PN>', Str(i));
     if (bPost) {
       if (HmsRegExMatch('(&?search_start=\\d+)', mpFilePath, sVal)) mpFilePath = ReplaceStr(mpFilePath, sVal, "");
-      sHtml += HmsUtf8Decode(HmsSendRequestEx("filmix.cool", "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8",sHeaders,sLink,nPort,0x10,sVal,true));
+      sHtml += HmsUtf8Decode(HmsSendRequestEx(sDomen, "/engine/ajax/sphinx_search.php", "POST", "application/x-www-form-urlencoded; charset=UTF-8",sHeaders,sLink,nPort,0x10,sVal,true));
     } else {
       sHtml += HmsUtf8Decode(HmsDownloadUrl(sLink)); // Загружаем страницу
     }
@@ -243,6 +245,8 @@ void CheckPodcastUpdate() {
 //                    Г Л А В Н А Я    П Р О Ц Е Д У Р А                     //
 ///////////////////////////////////////////////////////////////////////////////
 {
+  HmsRegExMatch('^(.*?//[^/]+)', Podcast[mpiFilePath], gsUrlBase); // Получаем значение в gsUrlBase
+  gbHttps = (LeftCopy(gsUrlBase, 5)=='https');                     // Флаг использования 443 порта для запросов
   FolderItem.DeleteChildItems(); // Удаляем созданное ранее содержимое
   
   if ((Pos('--nocheckupdates', mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate(); // Проверка обновлений подкаста

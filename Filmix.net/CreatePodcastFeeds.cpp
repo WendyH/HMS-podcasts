@@ -1,18 +1,27 @@
-﻿// 2018.06.07  Collaboration: WendyH, Big Dog, михаил
+﻿// 2018.07.01  Collaboration: WendyH, Big Dog, михаил
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
-string gsUrlBase = 'https://filmix.cool'; // Url база ссылок нашего сайта
+THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
+string gsUrlBase = ''; // Url база ссылок нашего сайта (берётся из корневого элемента)
 
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
 
 ///////////////////////////////////////////////////////////////////////////////
+// Установка переменной Podcast: поиск родительской папки, содержащий скрипт
+THmsScriptMediaItem GetRoot() {
+  Podcast = FolderItem; // Начиная с текущего элемента, ищется создержащий срипт
+  while ((Trim(Podcast[550])=='') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
+  return Podcast;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Создание подкаста
 THmsScriptMediaItem CreatePodcast(THmsScriptMediaItem Folder, string sName, string sLink, String sParams='') {
   THmsScriptMediaItem Item;                // Объявляем переменные
-  sLink = HmsExpandLink(sLink, gsUrlBase); // Делаем ссылку полной, если она таковой не является
+//sLink = HmsExpandLink(sLink, gsUrlBase); // Делаем ссылку полной, если она таковой не является
   Item  = Folder.AddFolder(sLink);         // Создаём подкаст с указанной ссылкой
   Item[mpiTitle] = sName;                  // Присваиваем наименование
   Item[mpiPodcastParameters] = sParams;    // Дополнительные параметры подкаста
@@ -72,6 +81,7 @@ void CreateStructure() {
 ///////////////////////////////////////////////////////////////////////////////
 //                  Г Л А В Н А Я    П Р О Ц Е Д У Р А                       //
 {
+  HmsRegExMatch('^(.*?//[^/]+)', Podcast[mpiFilePath], gsUrlBase); // Получаем значение в gsUrlBase
   DeleteFolders();   // Удаляем созданное ранее содержимое
   CreateStructure(); // Создаём подкасты
 }

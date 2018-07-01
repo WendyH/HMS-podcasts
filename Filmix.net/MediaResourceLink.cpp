@@ -1,11 +1,11 @@
-﻿// 2018.06.07  Collaboration: WendyH, Big Dog, михаил
+﻿// 2018.07.01  Collaboration: WendyH, Big Dog, михаил
 //////////////////  Получение ссылок на медиа-ресурс   ////////////////////////
 #define mpiSeriesInfo 10323  // Идентификатор для хранения информации о сериях
 
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = "https://filmix.cool";
+string    gsUrlBase    = ''; // Url база ссылок нашего сайта (берётся из корневого элемента)
 bool      gbHttps      = (LeftCopy(gsUrlBase, 5)=='https');
 int       gnTime       = 6000;
 int       gnTotalItems = 0;
@@ -13,10 +13,8 @@ int       gnQual       = 0;  // Минимальное качество для �
 TDateTime gStart       = Now;
 string    gsSeriesInfo = ''; // Информация о сериях сериала (названия)
 string    gsHeaders = mpFilePath+'\r\n'+
-                      ':authority: filmix.cool\r\n'+
                       'Accept: application/json, text/javascript, */*; q=0.01\r\n'+
                       'Accept-Encoding: identity\r\n'+
-                      'Origin: '+gsUrlBase+'\r\n'+
                       'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36\r\n'+
                       'X-Requested-With: XMLHttpRequest\r\n';
 
@@ -67,7 +65,8 @@ string Html5Decode(string sEncoded) {
 //////////////////////////////////////////////////////////////////////////////
 // Авторизация на сайте
 bool LoginToFilmix() {
-  string sName, sPass, sLink, sData, sPost, sRet;
+  string sName, sPass, sLink, sData, sPost, sRet, sDomen;
+  HmsRegExMatch('//([^/]+)', gsUrlBase, sDomen);
   int nPort = 443, nFlags = 0x10; // INTERNET_COOKIE_THIRD_PARTY;
   
   if ((Trim(mpPodcastAuthorizationUserName)=='') ||
@@ -80,10 +79,10 @@ bool LoginToFilmix() {
   sName = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationUserName)); // Логин
   sPass = HmsHttpEncode(HmsUtf8Encode(mpPodcastAuthorizationPassword)); // Пароль
   sPost = 'login_name='+sName+'&login_password='+sPass+'&login_not_save=0&login=submit';
-  sData = HmsSendRequestEx('filmix.cool', '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, sPost, nPort, nFlags, sRet, true);
+  sData = HmsSendRequestEx(sDomen, '/engine/ajax/user_auth.php', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', gsHeaders, sPost, nPort, nFlags, sRet, true);
   
   if (!HmsRegExMatch('AUTH_OK', sData, '')) {
-    ErrorItem('Не прошла авторизация на сайте filmix.cool. Неправильный логин/пароль?');
+    ErrorItem('Не прошла авторизация на сайте '+sDomen+'. Неправильный логин/пароль?');
     return false;  
   }
   
@@ -272,8 +271,8 @@ void CreateLinks() {
   
   if (HmsRegExMatch('--quality=(\\d+)', mpPodcastParameters, sVal)) gnQual = StrToInt(sVal);
   
-  //POST https://filmix.cool/api/episodes/get?post_id=103435&page=1  // episodes name
-  //POST https://filmix.cool/api/torrent/get_last?post_id=103435     // tottent file info
+  //POST https://filmix.co/api/episodes/get?post_id=103435&page=1  // episodes name
+  //POST https://filmix.co/api/torrent/get_last?post_id=103435     // tottent file info
   
   // -------------------------------------------------
   // Собираем информацию о фильме
@@ -352,6 +351,10 @@ void CreateLinks() {
 //                      Г Л А В Н А Я   П Р О Ц Е Д У Р А                    //
 ///////////////////////////////////////////////////////////////////////////////
 {
+  HmsRegExMatch('^(.*?//[^/]+)', Podcast[mpiFilePath], gsUrlBase); // Получаем значение в gsUrlBase
+  gbHttps = (LeftCopy(gsUrlBase, 5)=='https');                     // Флаг использования 443 порта для запросов
+  gsHeaders += ':authority: '+gsUrlBase+'\r\nOrigin: '+gsUrlBase+'\r\n';
+  
   if (PodcastItem.IsFolder) {
     if (!LoginToFilmix()) return;
     // Если это папка, создаём ссылки внутри этой папки
