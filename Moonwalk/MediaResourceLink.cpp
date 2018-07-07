@@ -174,11 +174,11 @@ void GetLink_Moonwalk(string sLink) {
       HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests."); 
       return; 
     }
-    string iv   = "e080ee12a6b39ad18309bc89d5097b77";
+    string iv   = "99a7f010c15190e47c14ba489b032ad9";
     string sKey = "617adae21a8aedc4e13938619b62f4ecdd3b947cd64620569df257d333e4f11d";
     HmsRegExMatch('\\be=[\'"](.*?)[\'"]', sData, sKey);
-    //HmsRegExMatch('\\bn=[\'"](.*?)[\'"]', sData, iv  );
-    sKey = "7316d0c4"+Trim(sKey); // snx 2 spell!
+    HmsRegExMatch('\\br=[\'"](.*?)[\'"]', sData, iv  ); // snx 2 spell!
+    sKey = "7316d0c4"+Trim(sKey);                       // snx 2 spell!
     POSTDATA.LoadFromString(sJSONParams);
     // Формируем данные для POST
     sPost = ""; string sData4Encrypt = "{";
