@@ -1,4 +1,4 @@
-﻿// VERSION = 2018.07.01
+﻿// VERSION = 2018.09.08
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -7,7 +7,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //               Г Л О Б А Л Ь Н Ы Е   П Е Р Е М Е Н Н Ы Е                   //
 THmsScriptMediaItem Podcast = GetRoot(); // Главная папка подкаста
-string    gsUrlBase    = "http://moonwalk.cc"; // База для относительных ссылок
+string    gsUrlBase    = "moonwalk.co"; // База для относительных ссылок
 int       gnTotalItems = 0;                    // Счётчик созданных элементов
 TDateTime gStart       = Now;                  // Время начала запуска скрипта
 string    gsTime       = "02:30:00.000";       // Продолжительность видео
@@ -60,7 +60,7 @@ void LoadKPSerialInfo() {
     }
     if (gsTVDBInfo=='') gsTVDBInfo = '-';
   }
-  PodcastItem[100507] = gsTVDBInfo;          // Запоминаем инфу 
+  PodcastItem[100507] = gsTVDBInfo;          // Запоминаем инфу
   PodcastItem[100509] = PodcastItem[100508]; // для такого количества серий
 }
 
@@ -99,31 +99,35 @@ void HDSLink(string sLink, string sQual = '') {
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с moonwalk.cc
 void GetLink_Moonwalk(string sLink) {
-  string sHtml, sData, sJsData, sPost, sVer, sQual, sVal, sServ, sVar, sUrlBase, sJSONParams;
-  int i, n; float f; TRegExpr RE; bool bHdsDump, bQualLog;
+  string sHtml, sData,sLinks, sJsData, sPost, sVer, sQual, sVal, sServ, sVar, sUrlBase, sJSONParams;
+  int i, n; float f; TRegExpr RE,RegExp; bool bHdsDump, bQualLog;
   TJsonObject JSON, OPTIONS, POSTDATA;
-  
-  string sUserAgent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36';
+
+  string sUserAgent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36';
   string sHeaders = sLink+'\r\n'+
-                    'Accept-Encoding: identity\r\n'+
-                    'User-Agent: '+sUserAgent+'\r\n';
-  
+                    //'accept-encoding: identity\r\n'+
+  //gzip, deflate, br
+                    'accept-encoding: gzip, deflate, br\r\n'+
+                    'user-agent: '+sUserAgent+'\r\n';
+
   // Проверка установленных дополнительных параметров
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
   bHdsDump = Pos('--hdsdump'      , mpPodcastParameters) > 0;
   bQualLog = Pos('--qualitylog'   , mpPodcastParameters) > 0;
-  
+
   // Замена домена moonwalk.co и moonwalk.pw на moonwalk.cc
   HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
   sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
-  
+
   if (HmsRegExMatch('<iframe[^>]+src="(http.*?)"', sHtml, sLink)) {
     // Если внутри есть ссылка на iframe - загружаем его
     HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
     sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
   }
   HmsRegExMatch2('(.*?//([^/]+))', sLink, sUrlBase, sServ); // Получаем UrlBase и домен
-  sHeaders += 'Origin: '+sUrlBase+'\r\nX-Requested-With: XMLHttpRequest\r\n';
+  //sHeaders += 'Origin: '+sUrlBase+'\r\n';
+  //sHeaders += 'X-Requested-With: XMLHttpRequest\r\n';
+  sHeaders += ':authority: '+sServ+'\r\n';
 
   JSON     = TJsonObject.Create();
   OPTIONS  = TJsonObject.Create();
@@ -137,12 +141,12 @@ void GetLink_Moonwalk(string sLink) {
       if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
         sVal = "Не найдены данные VideoBalancer в iframe.";
         if (HmsRegExMatch("<div[^>]+absolute.*?</div>", sHtml, sVal, 0, PCRE_SINGLELINE)) sVal = HmsRemoveLineBreaks(HmsHtmlToText(sVal, 65001));
-        HmsLogMessage(2, mpTitle+": "+sVal); 
+        HmsLogMessage(2, mpTitle+": "+sVal);
         // Заглушка
         sVal  = ExtractWord(Round(Random*2)+1, "wZ5JJ1CRWdO0,IRcEgNmu9AUn,ebxWWiOq6VbO", ",");
         sData = HmsDownloadURL("https://studio.stupeflix.com/v/"+sVal+"/", sHeaders, true);
         HmsRegExMatch('"(http[^>"]+\\.mp4)', sData, MediaResourceLink);
-        return;    
+        return;
       }
     }
 
@@ -161,24 +165,30 @@ void GetLink_Moonwalk(string sLink) {
 
     // Получение ссылки на js-скрипт, где есть список параметров POST запроса
     if (!HmsRegExMatch('src="([^"]+/video-[^"]+.js)', sHtml, sVal)) {
-      HmsLogMessage(2, mpTitle+": Не найдена ссылка на js-скрипт в iframe."); 
-      return; 
-    }      
-    sJsData = HmsDownloadURL(HmsExpandLink(sVal, sUrlBase), 'Referer: '+sLink);
+      HmsLogMessage(2, mpTitle+": Не найдена ссылка на js-скрипт в iframe.");
+      return;
+    }
+    sLinks = HmsExpandLink(sVal, sUrlBase);
+    sJsData = HmsDownloadURL(sLinks, 'Referer: '+sHeaders);
     // Получаем параметры POST запроса
-    if (!HmsRegExMatch('getVideoManifests.*?\\{(.*?\\}\\);)', sJsData, sData)) {
-      HmsLogMessage(2, mpTitle+": Не найдена функция getVideoManifests в скрипте плеера moonwalk."); 
-      return; 
+    if (!HmsRegExMatch('getVideoManifests.*?(\\{.*?\\})', sJsData, sData)) {
+      HmsLogMessage(2, mpTitle+": Не найдена функция getVideoManifests в скрипте плеера moonwalk.");
+      return;
     }
-    if (!HmsRegExMatch('t\\s*=\\s*({.*?})', sData, sJSONParams)) {
-      HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests."); 
-      return; 
+    if (!HmsRegExMatch('\\D=(\\{.*?\\})', sData, sJSONParams)) {
+      HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests.");
+      return;
     }
-    string iv   = "99a7f010c15190e47c14ba489b032ad9";
-    string sKey = "617adae21a8aedc4e13938619b62f4ecdd3b947cd64620569df257d333e4f11d";
-    HmsRegExMatch('\\be=[\'"](.*?)[\'"]', sData, sKey);
-    HmsRegExMatch('\\br=[\'"](.*?)[\'"]', sData, iv  ); // snx 2 spell!
-    sKey = "7316d0c4"+Trim(sKey);                       // snx 2 spell!
+
+    string sKey1,sKey2,sKey3,sKey4,sKey5,sKey6,sKey7;
+    string sKey = '19f15a0031b8548acfa8da1f2cdf7f73179ac13f3c4938c8bad5a1c93dd8fe06';
+    string iv = '79e4add175162a762071a11fe45d249f';
+
+    HmsRegExMatch('e\\.a[0-9a-z]+="([^"]+)",', sJsData,sKey1);
+    HmsRegExMatch3('e\\.d[0-9a-z]+="([^"]+)",e\\.e[0-9a-z]+="([^"]+)",e\\.t[0-9a-z]+="([^"]+)",',sJsData,sKey2,sKey3,sKey4);
+    HmsRegExMatch3('e\\.j[0-9a-z]+="([^"]+)",e\\.f[0-9a-z]+="([^"]+)",e\\.n[0-9a-z]+="([^"]+)",', sJsData, sKey5,sKey6,sKey7);
+    sKey = Trim(sKey1+sKey2+sKey3+sKey4+sKey5+sKey6+sKey7);
+    HmsRegExMatch(',\\br="([^"]+)",', sJsData, iv); // snx 2 spell!
     POSTDATA.LoadFromString(sJSONParams);
     // Формируем данные для POST
     sPost = ""; string sData4Encrypt = "{";
@@ -211,9 +221,9 @@ void GetLink_Moonwalk(string sLink) {
     if (sLink!="") sData = HmsDownloadURL(sLink, "Referer: "+sHeaders, true);
 
   } finally { JSON.Free; OPTIONS.Free; POSTDATA.Free; }
-  
+
   TStringList QLIST = TStringList.Create();
-  
+
   if (sVar=="m3u8") {
     MediaResourceLink = sLink;
     // Получение длительности видео, если она не установлена
@@ -229,10 +239,10 @@ void GetLink_Moonwalk(string sLink) {
       }
     }
     // ------------------------------------------------------------------------
-    
+
     // Если установлен ключ --quality или в настройках подкаста выставлен приоритет выбора качества
     // ------------------------------------------------------------------------
-    string sSelectedQual = '', sMsg, sHeight; int iMinPriority = 99, iPriority; 
+    string sSelectedQual = '', sMsg, sHeight; int iMinPriority = 99, iPriority;
     if ((sQual!='') || (mpPodcastMediaFormats!='')) {
       // Собираем список ссылок разного качества
       RE = TRegExpr.Create('#EXT-X-STREAM-INF:RESOLUTION=\\d+x(\\d+).*?[\r\n](http.+)$', PCRE_MULTILINE);
@@ -249,7 +259,7 @@ void GetLink_Moonwalk(string sLink) {
       RE.Free;
     }
     // ------------------------------------------------------------------------
-    
+
   } else if (sVar=="mp4") {
     // Составляем список ссылок с разным качеством
     JSON = TJsonObject.Create();
@@ -262,7 +272,7 @@ void GetLink_Moonwalk(string sLink) {
         QLIST.Values[sHeight] = sLink;
       }
     } finally { JSON.Free(); }
-    
+
   } else {
     HmsLogMessage(2, mpTitle+': Ошибка получения данных от сервера moonwalk.');
     if (DEBUG==1) {
@@ -326,8 +336,8 @@ void CreateInfoItem(string sName, TStrings INFO) {
     if (!HmsRegExMatch('(Год|IMDb)', sName, '')) sInfo += "|";
   }
   sInfo = Copy(sInfo, 1, Length(sInfo)-1);
-  
-  TStrings INFOTEXT = TStringList.Create();  
+
+  TStrings INFOTEXT = TStringList.Create();
   INFOTEXT.Values['Poster'] = mpThumbnail;
   INFOTEXT.Values['Title' ] = INFO.Values['Название'];
   INFOTEXT.Values['Info'  ] = Trim(sInfo);
@@ -374,14 +384,14 @@ THmsScriptMediaItem CreateMediaItem(THmsScriptMediaItem Folder, string sTitle, s
 // ----------------- Формирование видео с картинкой с информацией о фильме ----
 bool VideoPreview() {
   string sVal, sFileImage, sPoster, sTitle, sDescr, sCateg, sInfo, sLink, sData;
-  int xMargin=7, yMargin=10, nSeconds=10, n; 
+  int xMargin=7, yMargin=10, nSeconds=10, n;
   string gsCacheDir      = IncludeTrailingBackslash(HmsTempDirectory)+'Moonwalk/';
   string gsPreviewPrefix = "Moonwalk";
   float nH=cfgTranscodingScreenHeight, nW=cfgTranscodingScreenWidth;
   // Проверяем и, если указаны в параметрах подкаста, выставляем значения смещения от краёв
   if (HmsRegExMatch('--xmargin=(\\d+)', mpPodcastParameters, sVal)) xMargin=StrToInt(sVal);
   if (HmsRegExMatch('--ymargin=(\\d+)', mpPodcastParameters, sVal)) yMargin=StrToInt(sVal);
-  
+
   if (Trim(PodcastItem[1001001])=='') return; // Если нет инфы - выходим быстро!
     TStrings INFO = TStringList.Create();       // Создаём объект TStrings
   INFO.Text  = PodcastItem[1001001];          // И загружаем туда информацию
@@ -394,7 +404,7 @@ bool VideoPreview() {
   ForceDirectories(gsCacheDir);
   sFileImage = ExtractShortPathName(gsCacheDir)+'videopreview_'; // Файл-заготовка для сохранения картинки
   sDescr = Copy(sDescr, 1, 3000); // Если блок описания получился слишком большой - обрезаем
-  
+
   INFO.Text = ""; // Очищаем объект TStrings для формирования параметров запроса
   INFO.Values['prfx'  ] = gsPreviewPrefix;  // Префикс кеша сформированных картинок на сервере
   INFO.Values['title' ] = sTitle;           // Блок - Название
@@ -406,7 +416,7 @@ bool VideoPreview() {
   INFO.Values['h' ] = IntToStr(Round(nH));  // Высота кадра
   INFO.Values['xm'] = IntToStr(xMargin);    // Отступ от краёв слева/справа
   INFO.Values['ym'] = IntToStr(yMargin);    // Отступ от краёв сверху/снизу
-  INFO.Values['bg'] = 'http://www.pageresource.com/wallpapers/wallpaper/noir-blue-dark_3512158.jpg'; // Катринка фона (кэшируется на сервере) 
+  INFO.Values['bg'] = 'http://www.pageresource.com/wallpapers/wallpaper/noir-blue-dark_3512158.jpg'; // Катринка фона (кэшируется на сервере)
   INFO.Values['fx'] = '3'; // Номер эффекта для фона: 0-нет, 1-Blur, 2-more Blur, 3-motion Blur, 4-radial Blur
   INFO.Values['fztitle'] = IntToStr(Round(nH/14)); // Размер шрифта блока названия (тут относительно высоты кадра)
   INFO.Values['fzinfo' ] = IntToStr(Round(nH/22)); // Размер шрифта блока информации
@@ -429,7 +439,7 @@ bool VideoPreview() {
   for (n=0; n<INFO.Count; n++) sData += '&'+Trim(INFO.Names[n])+'='+HmsHttpEncode(INFO.Values[INFO.Names[n]]);
   INFO.Free(); // Освобождаем объект из памяти, теперь он нам не нужен
   // Делаем POST запрос не сервер формирования картинки с информацией
-  sLink = HmsSendRequestEx('wonky.lostcut.net', '/videopreview.php?p='+gsPreviewPrefix, 'POST', 
+  sLink = HmsSendRequestEx('wonky.lostcut.net', '/videopreview.php?p='+gsPreviewPrefix, 'POST',
   'application/x-www-form-urlencoded', '', sData, 80, 0, '', true);
   // В ответе должна быть ссылка на сформированную картинку
   if (LeftCopy(sLink, 4)!='http') {HmsLogMessage(2, 'Ошибка получения файла информации videopreview.'); return;}
@@ -452,10 +462,10 @@ bool VideoPreview() {
 void GetSerialInfoFromImdb(string sName, TStrings INFO) {
   string sData, sLink, sID, sKey, sImg, sVal; int nSeason, nEpisode, nYear;
   TJsonObject JSON, MOVIE, SEASON, EPISODE; TJsonArray SEASONS, EPISODES;
-  
+
   sLink = 'http://www.myapifilms.com/imdb/idIMDB?format=json&language=ru&token=c5c8d3f3-0524-4c66-90df-e2e727b2e628&&seasons=1&title='+HmsHttpEncode(sName);
   sData = HmsRemoveLineBreaks(HmsDownloadURL(sLink, '', true));
-  
+
   JSON = TJsonObject.Create();
   try {
     JSON.LoadFromString(sData);
@@ -472,51 +482,52 @@ void GetSerialInfoFromImdb(string sName, TStrings INFO) {
         sKey = IntToStr(nSeason+1)+'x'+EPISODE.S['episode'];
         INFO.Values[sKey] = sImg;
       }
-    } 
-    
-  } finally { JSON.Free; } 
+    }
+
+  } finally { JSON.Free; }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание списка серий сериала с Moonwalk.cc
 void CreateMoonwallkLinks(string sLink) {
-  String sHtml, sData, sServ, sRef, sSerie, sVal, sHeaders, sID, sSub, sFile;
+  String sHtml, sData, sServ, sRef, sTrail, sType, sSerie, sVal, sHeaders, sID, sSub, sFile;
   int n, nEpisode, nSeason; THmsScriptMediaItem Item, Folder = PodcastItem;
   TJsonObject JSON; TJsonArray JARRAY, EPISODE; bool bOneSeason;
-  
+
   sHeaders = sLink+'/\r\n'+
              'Accept-Encoding: gzip, deflate\r\n'+
              'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:13.0) Gecko/20100101 Firefox/13.0\r\n'+
              'X-Requested-With: XMLHttpRequest\r\n';
-  
+
   gbUseSerialKPInfo = Pos("--usekpinfo", mpPodcastParameters) > 0;
-  
+
   sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
   if (HmsRegExMatch('<body>\\s*?</body>', sHtml, '')) {
     HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
     sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
   }
   if (HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
-    if (LeftCopy(sLink, 2)=="//") sLink = "http:" + Trim(sLink);
+    if (LeftCopy(sLink, 2)=="//") sLink = "https:" + Trim(sLink);
     sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
   }
   sHtml = HmsRemoveLineBreaks(HmsUtf8Decode(sHtml));
-  
+
   if (Trim(mpSeriesTitle)=='') { PodcastItem[mpiSeriesTitle] = mpTitle; HmsRegExMatch('^(.*?)[\\(\\[]', mpTitle, PodcastItem[mpiSeriesTitle]); }
-  
+
   if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
     if (HmsRegExMatch('>([^<]+Error.*?)<', sHtml, sVal))
       CreateErrorItem(sVal);
     HmsLogMessage(2, mpTitle+': Не найдены данные VideoBalancer в iframe.');
-    return;    
+    return;
   }
+  HmsRegExMatch("trailer_token:\\s'(.*?)'", sData, sTrail);
   JSON = TJsonObject.Create();
   try {
     JSON.LoadFromString(sData);
     HmsRegExMatch("'(.*?)'", JSON.S['ref'], sRef);
     nSeason = 0;
     if (HmsRegExMatch2('^(.*?)\\?season=(\\d+)', sLink, sLink, sVal)) nSeason = StrToInt(sVal);
-    
+
     // Подсчитываем количество серий и запоминаем в укромном месте
     n = JSON['episodes'].Count; PodcastItem[100508] = Str(n);
     JARRAY = JSON.A['seasons'];
@@ -545,6 +556,10 @@ void CreateMoonwallkLinks(string sLink) {
     } else {
       // Просто ссылка на фильм
       Item = CreateMediaItem(Folder, mpTitle, sLink, mpThumbnail, gsTime);
+      if(sTrail){
+        HmsRegExMatch("https://.*?/(.*?)/.*?/iframe", sLink, sType);
+        Item = CreateMediaItem(Folder,'Трейлер', 'https://trailerclub.me/'+sType+'/'+sTrail+'/iframe', mpThumbnail, '');
+      }
     }
 
   } finally { JSON.Free; }
@@ -557,7 +572,7 @@ void SetInfo(string sHtml, string sPattern, string sName, TStrings INFO) {
     sVal = ReplaceStr(HmsHtmlToText(sVal), '|', '');
     if ((sVal!='') && (sVal!='-'))
       INFO.Values[sName] = sVal;
-  } 
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -567,7 +582,7 @@ void CreateInfoItems() {
   if (!HmsRegExMatch('kinopoisk.ru/images/film/(\\d+)', mpThumbnail, sKPID)) return;
   sHtml = HmsDownloadURL('https://www.kinopoisk.ru/film/'+sKPID+'/', 'Referer: http://ivi.ru', true);
   sHtml = HmsRemoveLineBreaks(HmsUtf8Decode(sHtml));
-  
+
   INFO = TStringList.Create;
   SetInfo(sHtml, '(<h1.*?</h1>)'           , 'Название', INFO);
   SetInfo(sHtml, '>год</td>(.*?)</tr>'     , 'Год'     , INFO);
@@ -581,13 +596,13 @@ void CreateInfoItems() {
   SetInfo(sHtml, '>возраст</td>(.*?)</tr>' , 'Возраст' , INFO);
   SetInfo(sHtml, '>жанр</td>(.*?)</(span|tr)>', 'Жанр' , INFO);
   SetInfo(sHtml, '>IMDb:(.*?)</'           , 'IMDb'    , INFO);
-  
+
   SetInfo(sHtml, '>сборы в США</td>(.*?)</(a|tr)>'   , 'Сборы в США'   , INFO);
   SetInfo(sHtml, '>сборы в мире</td>(.*?)</(a|tr)>'  , 'Сборы в мире'  , INFO);
   SetInfo(sHtml, '>сборы в России</td>(.*?)</(a|tr)>', 'Сборы в России', INFO);
   SetInfo(sHtml, '>премьера (мир)</td>(.*?)</(a|tr)>', 'Премьера (мир)', INFO);
   SetInfo(sHtml, '>премьера (РФ)</td>(.*?)</(a|tr)>' , 'Премьера (РФ)' , INFO);
-  
+
   if (HmsRegExMatch('"rating_ball">(.*?)</(span|tr)>', sHtml, sVal)) {
     if (HmsRegExMatch('"ratingCount">(.*?)</(span|tr)>', sHtml, sVal2)) sVal += ' ('+HmsHtmlToText(sVal2)+')';
     INFO.Values['Рейтинг КП'] = HmsHtmlToText(sVal);
@@ -598,7 +613,7 @@ void CreateInfoItems() {
     }
   }
   SetInfo(sHtml, '(<div[^>]+"description".*?</div>)', 'Описание', INFO);
-  
+
   if (HmsRegExMatch('video_src[^>]+content="[^>"]+file=([^"&]+)', sHtml, sVal)) {
     HmsRegExMatch('image_src[^>]+href="(.*?)"', sHtml, sImg);
     if (HmsRegExMatch('video:duration[^>]+content="(\\d+)"', sHtml, sTime))
@@ -607,7 +622,7 @@ void CreateInfoItems() {
       sTime = "00:03:50.000";
     CreateMediaItem(PodcastItem, "Трейлер", HmsHttpDecode(sVal), sImg, sTime);
   }
-  
+
   // Создаём выборочно информационные ссылки
   CreateInfoItem('Страна'    , INFO);
   CreateInfoItem('Жанр'      , INFO);
@@ -622,7 +637,7 @@ void CreateInfoItems() {
 void CreateTrailersLinks(string sLink) {
   string sHtml, sName, sTitle, sVal, sImg;
   TRegExpr RE1, RE2; THmsScriptMediaItem Item;
-  
+
   sHtml = HmsDownloadURL(sLink, 'Referer: '+sLink, true);
   RE1 = TRegExpr.Create('<!-- ролик -->(.*?)<!-- /ролик -->', PCRE_SINGLELINE);
   RE2 = TRegExpr.Create('<a[^>]+href="/getlink.php[^>]+link=([^>]+\\.(mp4|mov|flv)).*?</a>', PCRE_SINGLELINE);
@@ -638,10 +653,10 @@ void CreateTrailersLinks(string sLink) {
       Item  = PodcastItem.FindItemByProperty(mpiTitle, sName);
       if ((Item != null) && (Item != nil))
         Item[mpiFilePath] = sLink;
-      else 
+      else
         CreateMediaItem(PodcastItem, sName, sLink, sImg, '00:03:50.000');
     } while (RE2.SearchAgain());
-  
+
   } while (RE1.SearchAgain());
   RE1.Free; RE2.Free;
 }
@@ -650,11 +665,11 @@ void CreateTrailersLinks(string sLink) {
 //                     Г Л А В Н А Я   П Р О Ц Е Д У Р А                     //
 ///////////////////////////////////////////////////////////////////////////////
 {
-  
+
   if (PodcastItem.IsFolder) {
     PodcastItem.DeleteChildItems();
-    
-    if (HmsRegExMatch('kinopoisk.ru', mpFilePath, '')) {
+
+    if (HmsRegExMatch('www.kinopoisk.ru', mpFilePath, '')) {
       CreateTrailersLinks(mpFilePath);
 
     } else {
@@ -663,7 +678,7 @@ void CreateTrailersLinks(string sLink) {
         CreateInfoItems();
       }
     }
-    
+
   } else {
 
     if (LeftCopy(mpFilePath, 4)=='Info')
@@ -672,7 +687,7 @@ void CreateTrailersLinks(string sLink) {
       MediaResourceLink = mpFilePath;
     else
       GetLink_Moonwalk(mpFilePath);
-    
+
   }
-  
+
 }

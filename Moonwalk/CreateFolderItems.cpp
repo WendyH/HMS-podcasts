@@ -1,4 +1,4 @@
-﻿// VERSION = 2018.01.30
+﻿// VERSION = 2018.09.08
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -18,7 +18,7 @@ string gsPatternTitle = '<tr>\\s*?(<td.*?</td>)';   // Название
 string gsPatternLink  = '//[^/\'"]+(/[^\'"]+/iframe)'; // Ссылка
 string gsPatternKP    = 'kinopoisk.ru/film/(.*?)/'; // Код фильма на Kinopoisk
 string gsPatternYear  = '<td>(\\d{4})</td>';        // Год
-string gsPatternAudio = '';                         // Озвучка / Перевод
+string gsPatternAudio = '<td>\\d{1,4}</td>\\s+<td>(\\D+)</td>'; // Озвучка / Перевод
 string gsPatternPages = 'pagination.*/search_as/(\\d+)[/\\?]'; // Регулярное выражение для поиска максимального номера страницы для дозагрузки
 string gsPagesParams  = 'search_as/<PN>';                      // Параметр с номером страницы, который добавляется к ссылке
 string gsHeaders = 'Referer: '+gsUrlBase+'/\r\n'+              // HTTP заголовки для запросов
@@ -28,7 +28,7 @@ string gsHeaders = 'Referer: '+gsUrlBase+'/\r\n'+              // HTTP заго�
 
 string    gsTVDBInfo   = "";
 bool gbUseSerialKPInfo = false;
- 
+
 ///////////////////////////////////////////////////////////////////////////////
 //                             Ф У Н К Ц И И                                 //
 
@@ -36,7 +36,7 @@ bool gbUseSerialKPInfo = false;
 // Установка переменной Podcast: поиск родительской папки, содержащий скрипт
 THmsScriptMediaItem GetRoot() {
   Podcast = FolderItem; // Начиная с текущего элемента, ищется создержащий срипт
-  while ((Trim(Podcast[550])=='') && (Podcast[532]!='1') && (Podcast.ItemParent!=nil)) 
+  while ((Trim(Podcast[550])=='') && (Podcast[532]!='1') && (Podcast.ItemParent!=nil))
     Podcast=Podcast.ItemParent;
   return Podcast;
 }
@@ -76,7 +76,7 @@ void LoadKPSerialInfo() {
     }
     if (gsTVDBInfo=='') gsTVDBInfo = '-';
   }
-  FolderItem[100507] = gsTVDBInfo;          // Запоминаем инфу 
+  FolderItem[100507] = gsTVDBInfo;          // Запоминаем инфу
   FolderItem[100509] = FolderItem[100508]; // для такого количества серий
 }
 
@@ -97,7 +97,7 @@ void GetSerialInfo(THmsScriptMediaItem Item, int nSeason, int nEpisode) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание ссылки на видео
-THmsScriptMediaItem CreateMediaItem(THmsScriptMediaItem Folder, string sTitle, 
+THmsScriptMediaItem CreateMediaItem(THmsScriptMediaItem Folder, string sTitle,
 string sLink, string sImg, string sTime) {
   THmsScriptMediaItem Item = HmsCreateMediaItem(sLink, Folder.ItemID);
   Item[mpiTitle     ] = sTitle; // Присваиваем наименование
@@ -115,7 +115,7 @@ THmsScriptMediaItem CreateFolder(THmsScriptMediaItem ParentFolder, string sName,
   Item[mpiTitle     ] = sName; // Присваиваем наименование
   Item[mpiThumbnail ] = sImg;  // Картинка
   Item[mpiCreateDate] = DateTimeToStr(IncTime(gStart, 0, -gnTotalItems, 0, 0)); // Для обратной сортировки по дате создания
-  
+
   gnTotalItems++;             // Увеличиваем счетчик созданных элементов
   return Item;                // Возвращаем созданный объект
 }
@@ -136,22 +136,23 @@ void LoadAndParse() {
   string sHtml, sData, sName, sLink, sImg, sYear, sPage, sVal, sKPID, sTran, sGroupMode="", sGrp="";
   THmsScriptMediaItem Item, Folder = FolderItem; TRegExpr RegEx; bool bGroup, bJustLinks, bYearInTitle=false;
   int i, n, nPages=0, iCnt=0, nGrp=0, nMaxPages=10, nMaxInGroup=100, nMinInGroup=100;
-  
+
   // Проверка установленных дополнительных параметров
   if (HmsRegExMatch('--maxingroup=(\\d+)', mpPodcastParameters, sVal)) nMaxInGroup = StrToInt(sVal);
   if (HmsRegExMatch('--maxpages=(\\d+)'  , mpPodcastParameters, sVal)) nMaxPages   = StrToInt(sVal);
   HmsRegExMatch('--group=(\\w+)', mpPodcastParameters, sGroupMode);
   bYearInTitle = (Pos('--yearintitle', mpPodcastParameters)>0);
   bJustLinks    = (Pos('--justlinks'  , mpPodcastParameters)>0);
-  
+
   //mpFilePath = ReplaceStr(mpFilePath, 'moonwalk/search?', 'moonwalk/search_as?');
-  
+
   if (LeftCopy(mpFilePath, 4) != "http") {
     // Если нет ссылки - делаем поиск названия
     sLink = gsUrlBase+'/moonwalk/search_as?search_for=&commit=%D0%9D%D0%B0%D0%B9%D1%82%D0%B8&sq='+HmsPercentEncode(HmsUtf8Encode(mpTitle));
     sHtml = HmsDownloadURL(sLink, gsHeaders, true);
+    sHtml = HmsUtf8Decode(sHtml);
     nMaxPages = 1;
-    
+
   } else if (RightCopy(mpFilePath, 4)=='.txt') {
     gsPatternBlock = '(.*?)<br>';         // Искомые блоки
     gsPatternTitle = '^(.*?);';           // Название
@@ -162,7 +163,7 @@ void LoadAndParse() {
     sHtml = HmsDownloadURL(mpFilePath, gsHeaders, true);
     if (HmsRegExMatch('(<link.*?>)', sHtml, sVal)) sHtml = ReplaceStr(sHtml, sVal, '');
     if (HmsRegExMatch('(<meta.*?>)', sHtml, sVal)) sHtml = ReplaceStr(sHtml, sVal, '');
-    
+
   } else {
     sHtml = HmsDownloadURL(mpFilePath, gsHeaders, true);
 
@@ -212,10 +213,10 @@ void LoadAndParse() {
       HmsRegExMatch(gsPatternYear , RegEx.Match, sYear);
       HmsRegExMatch(gsPatternAudio, RegEx.Match, sTran);
       if (Trim(sLink)=="") continue;
-      
+
       sName = ReplaceStr(HmsHtmlToText(sName), "/", "-");
       sTran = ReplaceStr(HmsHtmlToText(sTran), "/", "-");
-      if (LeftCopy(sLink, 2)=="//") 
+      if (LeftCopy(sLink, 2)=="//")
         sLink = "http:" + Trim(sLink);
       else
         sLink = HmsExpandLink(sLink, gsUrlBase);
@@ -225,7 +226,7 @@ void LoadAndParse() {
 
       if (sTran!='') sName += ' ['+sTran+']';
       if (bYearInTitle && (sYear!='') && (Pos(sYear, sName)<1)) sName += ' ('+sYear+')';
-      
+
       // Контроль группировки (создаём папку с именем группы)
       if (sGroupMode=='alph') {
         Folder = FolderItem.AddFolder(GetGroupName(sName));
@@ -261,34 +262,35 @@ void LoadAndParse() {
 ///////////////////////////////////////////////////////////////////////////////
 // Создание списка серий сериала с Moonwalk.cc
 void CreateMoonwallkLinks(string sLink) {
-  String sHtml, sData, sServ, sRef, sSerie, sVal, sHeaders, sID;
+  String sHtml, sData, sServ, sRef, sSerie, sTrail, sVal, sHeaders, sID;
   int n, nEpisode, nSeason; THmsScriptMediaItem Item, Folder = FolderItem;
   TJsonObject JSON; TJsonArray JARRAY, EPISODE; bool bOneSeason;
-  
+
   sHeaders = sLink+'/\r\n'+
              'Accept-Encoding: gzip, deflate\r\n'+
              'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:13.0) Gecko/20100101 Firefox/13.0\r\n'+
              'X-Requested-With: XMLHttpRequest\r\n';
-  
+
   gbUseSerialKPInfo = Pos("--usekpinfo", mpPodcastParameters) > 0;
-  
+
   sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
   if (HmsRegExMatch('<body>\\s*?</body>', sHtml, '')) {
     sLink = ReplaceStr(sLink, 'moonwalk.pw', 'moonwalk.cc');
     sLink = ReplaceStr(sLink, 'moonwalk.co', 'moonwalk.cc');
     sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
   }
-  if (HmsRegExMatch('<iframe[^>]+src="(http.*?)"', sHtml, sLink)) sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders, true);
+  if (HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) sHtml = HmsDownloadURL('https:'+sLink, 'Referer: '+sHeaders, true);
   sHtml = HmsRemoveLineBreaks(HmsUtf8Decode(sHtml));
-  
+
   if (Trim(mpSeriesTitle)=='') { FolderItem[mpiSeriesTitle] = mpTitle; HmsRegExMatch('^(.*?)[\\(\\[]', mpTitle, FolderItem[mpiSeriesTitle]); }
-  
+
   if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
-    if (HmsRegExMatch('>([^<]+Error.*?)<', sHtml, sVal)) 
+    if (HmsRegExMatch('>([^<]+Error.*?)<', sHtml, sVal))
       CreateMediaItem(FolderItem, sVal, '-err', 'http://wonky.lostcut.net/icons/symbol-error.png', '7');
     HmsLogMessage(2, mpTitle+': Не найдены данные VideoBalancer в iframe.');
-    return;    
+    return;
   }
+  HmsRegExMatch("trailer_token:\\s'(.*?)'", sData, sTrail);
   JSON = TJsonObject.Create();
   try {
     JSON.LoadFromString(sData);
@@ -323,6 +325,10 @@ void CreateMoonwallkLinks(string sLink) {
     } else {
       // Просто ссылка на фильм
       Item = CreateMediaItem(Folder, mpTitle, sLink, mpThumbnail, gsTime);
+     if(sTrail){
+      Item = CreateMediaItem(Folder,'Трейлер', mpTitle, sTrail, mpThumbnail);
+    }
+
     }
 
   } finally { JSON.Free; }
@@ -348,8 +354,8 @@ void CreateInfoItem(string sName, TStrings INFO) {
     if (!HmsRegExMatch('(Год|IMDb)', sName, '')) sInfo += "|";
   }
   sInfo = Copy(sInfo, 1, Length(sInfo)-1);
-  
-  TStrings INFOTEXT = TStringList.Create();  
+
+  TStrings INFOTEXT = TStringList.Create();
   INFOTEXT.Values['Poster'] = mpThumbnail;
   INFOTEXT.Values['Title' ] = INFO.Values['Название'];
   INFOTEXT.Values['Info'  ] = Trim(sInfo);
@@ -367,7 +373,7 @@ void SetInfo(string sHtml, string sPattern, string sName, TStrings INFO) {
     sVal = ReplaceStr(HmsHtmlToText(sVal), '|', '');
     if ((sVal!='') && (sVal!='-'))
       INFO.Values[sName] = sVal;
-  } 
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -377,7 +383,7 @@ void CreateInfoItems() {
   if (!HmsRegExMatch('kinopoisk.ru/images/film/(\\d+)', mpThumbnail, sKPID)) return;
   sHtml = HmsDownloadURL('https://www.kinopoisk.ru/film/'+sKPID+'/', 'Referer: http://ivi.ru', true);
   sHtml = HmsRemoveLineBreaks(HmsUtf8Decode(sHtml));
-  
+
   INFO = TStringList.Create;
   SetInfo(sHtml, '(<h1.*?</h1>)'           , 'Название', INFO);
   SetInfo(sHtml, '>год</td>(.*?)</tr>'     , 'Год'     , INFO);
@@ -391,13 +397,13 @@ void CreateInfoItems() {
   SetInfo(sHtml, '>возраст</td>(.*?)</tr>' , 'Возраст' , INFO);
   SetInfo(sHtml, '>жанр</td>(.*?)</(span|tr)>', 'Жанр' , INFO);
   SetInfo(sHtml, '>IMDb:(.*?)</'           , 'IMDb'    , INFO);
-  
+
   SetInfo(sHtml, '>сборы в США</td>(.*?)</(a|tr)>'   , 'Сборы в США'   , INFO);
   SetInfo(sHtml, '>сборы в мире</td>(.*?)</(a|tr)>'  , 'Сборы в мире'  , INFO);
   SetInfo(sHtml, '>сборы в России</td>(.*?)</(a|tr)>', 'Сборы в России', INFO);
   SetInfo(sHtml, '>премьера (мир)</td>(.*?)</(a|tr)>', 'Премьера (мир)', INFO);
   SetInfo(sHtml, '>премьера (РФ)</td>(.*?)</(a|tr)>' , 'Премьера (РФ)' , INFO);
-  
+
   if (HmsRegExMatch('"rating_ball">(.*?)</(span|tr)>', sHtml, sVal)) {
     if (HmsRegExMatch('"ratingCount">(.*?)</(span|tr)>', sHtml, sVal2)) sVal += ' ('+HmsHtmlToText(sVal2)+')';
     INFO.Values['Рейтинг КП'] = HmsHtmlToText(sVal);
@@ -408,7 +414,7 @@ void CreateInfoItems() {
     }
   }
   SetInfo(sHtml, '(<div[^>]+"description".*?</div>)', 'Описание', INFO);
-  
+
   if (HmsRegExMatch('video_src[^>]+content="[^>"]+file=([^"&]+)', sHtml, sVal)) {
     HmsRegExMatch('image_src[^>]+href="(.*?)"', sHtml, sImg);
     if (HmsRegExMatch('video:duration[^>]+content="(\\d+)"', sHtml, sTime))
@@ -417,7 +423,7 @@ void CreateInfoItems() {
       sTime = "00:03:50.000";
     CreateMediaItem(FolderItem, "Трейлер", HmsHttpDecode(sVal), sImg, sTime);
   }
-  
+
   // Создаём выборочно информационные ссылки
   CreateInfoItem('Страна'    , INFO);
   CreateInfoItem('Жанр'      , INFO);
@@ -432,7 +438,7 @@ void CreateInfoItems() {
 void CheckPodcastUpdate() {
   TJsonObject JSON, JFILE; TJsonArray JARRAY; bool bChanges=false;
   string sData, sName, sLang, sExt, sMsg; int i, mpiTimestamp=100602, mpiSHA, mpiScript;
-  
+
   // Если после последней проверки прошло меньше получаса - валим
   if ((Podcast.ItemParent==nil) || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
@@ -453,13 +459,13 @@ void CheckPodcastUpdate() {
       if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
         if (sData=='') continue;                                                     // Если не получилось загрузить, пропускаем
-          Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
+        Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
         Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
         Podcast[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
         HmsLogMessage(1, Podcast[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
         if (sMsg!='') FolderItem.AddFolder(' !'+sMsg+'!');                           // Выводим сообщение как папку
       }
-    } 
+    }
   } finally { JSON.Free; if (bChanges) HmsDatabaseAutoSave(true); }
 } //Вызов в главной процедуре: if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate();
 
@@ -467,9 +473,9 @@ void CheckPodcastUpdate() {
 // Проверка актуальности версии функции GetLink_Moonwalk в скриптах
 void CheckMoonwalkFunction() {
   string sData, sFuncOld, sFuncNew; TJsonObject JSON; TDateTime UPDTIME;
-  int nTimePrev, nTimeNow, mpiTimestamp=100862, mpiMWVersion=100821; 
+  int nTimePrev, nTimeNow, mpiTimestamp=100862, mpiMWVersion=100821;
   string sPatternMoonwalkFunction = "(// Получение ссылки с moonwalk.cc.*?// Конец функции поулчения ссылки с moonwalk.cc)";
-  
+
   // Если после последней проверки прошло меньше получаса - валим
   if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 3600)) return; // раз в час
   Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
@@ -498,7 +504,7 @@ void CheckMoonwalkFunction() {
 
   if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate(); // Проверка обновлений подкаста
   if (Pos('--noupdatemoonwalk', mpPodcastParameters)<1) CheckMoonwalkFunction();
-  
+
   if (HmsRegExMatch("/(serial|movie|video)/", mpFilePath, '')) {
     CreateMoonwallkLinks(mpFilePath); // Cоздание ссылок на фильм или сериал
     if ((Pos('?season', mpFilePath) < 1) && (Pos('--infoitems', mpPodcastParameters) > 0)) {
@@ -510,4 +516,3 @@ void CheckMoonwalkFunction() {
 
   HmsLogMessage(1, Podcast[mpiTitle]+' "'+mpTitle+'": Создано элементов - '+IntToStr(gnTotalItems));
 }
-

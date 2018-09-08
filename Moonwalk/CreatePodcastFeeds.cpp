@@ -1,4 +1,4 @@
-﻿// VERSION = 2018.03.23
+﻿// VERSION = 2018.09.08
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -180,12 +180,13 @@ void CreateSeriesList() {
   Folder = CreateItem(FolderItem, '00. Избранное');
   CreateSearchFolder (FolderItem, '01. Поиск');
   Folder = CreateItem(FolderItem, '02. Новинки фильмов', '/moonwalk/search_as?sq=&kinopoisk_id=&search_for=film&search_year=updates&commit=%D0%9D%D0%B0%D0%B9%D1%82%D0%B8');
-  Folder[mpiPodcastParameters] = '--maxpages=4 --maxingroup=160';
+  Folder[mpiPodcastParameters] = '--maxpages=5 --maxingroup=160';
   Folder[mpiComment          ] = '--update';
   
   Folder = CreateItem(FolderItem, '03. По годам');
   Folder[mpiPodcastParameters] = '--maxpages=10';
   Folder[mpiFolderSortOrder  ] = mpiTitle;
+  CreateItem(Folder, '2018'     , "/moonwalk/search_as?search_for=film&search_year=2018");
   CreateItem(Folder, '2017'     , "/moonwalk/search_as?search_for=film&search_year=2017");
   CreateItem(Folder, '2016'     , "/moonwalk/search_as?search_for=film&search_year=2016");
   CreateItem(Folder, '2015'     , "/moonwalk/search_as?search_for=film&search_year=2015");
