@@ -105,10 +105,13 @@ void GetLink_Moonwalk(string sLink) {
 
   string sUserAgent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36';
   string sHeaders = sLink+'\r\n'+
-                    //'accept-encoding: identity\r\n'+
-  //gzip, deflate, br
-                    'accept-encoding: gzip, deflate, br\r\n'+
                     'user-agent: '+sUserAgent+'\r\n';
+  // Для Windows XP - отключаем сжатие страниц. Ибо автоматом ответы не распаковываются.
+  if (StrToFloatDef(RegistryRead("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\CurrentVersion"), 0) < 6) {
+    sHeaders += 'accept-encoding: identity\r\n';
+  } else {
+    sHeaders += 'accept-encoding: gzip, deflate, br\r\n';
+  }
 
   // Проверка установленных дополнительных параметров
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
@@ -689,5 +692,8 @@ void CreateTrailersLinks(string sLink) {
       GetLink_Moonwalk(mpFilePath);
 
   }
+  
+  
+  
 
 }
