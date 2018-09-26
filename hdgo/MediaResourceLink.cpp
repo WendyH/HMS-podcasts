@@ -368,6 +368,7 @@ void CreateHdgoLinks(string sLink) {
           sLink = EPISODE.S["link" ];
           sName = EPISODE.S["name" ];
           sImg  = EPISODE.S["image"];
+          if (LeftCopy(sLink, 2)=='//') sLink = 'http:'+Trim(sLink);
           if (bDirectLinks)
             sLink = GetMP4LinkHdgo(sLink);
           CreateMediaItem(PodcastItem, sName, sLink, sImg, sGrp, nTime);
@@ -382,6 +383,7 @@ void CreateHdgoLinks(string sLink) {
         TRegExpr RE = TRegExpr.Create("url:\\s*'(.*?)'", PCRE_SINGLELINE);
         if (RE.Search(sData)) do {
           sLink = RE.Match(); sVal="";
+          if (LeftCopy(sLink, 2)=='//') sLink = 'http:'+Trim(sLink);
           HmsRegExMatch("/(\\d)/", sLink, sVal);
           if      (sVal=="1") sName = "[360p] "+JSON.S["name"];
           else if (sVal=="2") sName = "[480p] "+JSON.S["name"];
