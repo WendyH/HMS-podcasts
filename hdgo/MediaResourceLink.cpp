@@ -1,4 +1,4 @@
-﻿// 2018.05.12
+﻿// 2018.09.27
 ////////////////////  Получение ссылки на медиа-ресурс  ///////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 
@@ -441,7 +441,7 @@ string LoadHdgoHtml(string sLink, string &sReferer) {
     HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
     sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.cc");
   }
-  if (!HmsRegExMatch("url:\\s*'http", sHtml, '') && HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
+  if (!HmsRegExMatch("url:\\s*'(http|//)", sHtml, '') && HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
     if (LeftCopy(sLink, 2)=="//") sLink = "http:"+Trim(sLink);
     HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
     sHtml = HmsDownloadURL(sLink, "Referer: "+sLink);
