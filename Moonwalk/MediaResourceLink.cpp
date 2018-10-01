@@ -1,9 +1,5 @@
 ﻿// VERSION = 2018.10.01
-<<<<<<< HEAD
 ////////////////////////  Получение ссылки на поток ///////////////////////////
-=======
-////////////////////////  Создание  списка  видео   ///////////////////////////
->>>>>>> origin/master
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
 #define DEBUG 0 // Флаг отладки. 1 - при неудачном получении ссылки сохранять файл на рабочий стол ex-fs.log. 0 - не сохранять
@@ -185,18 +181,11 @@ void GetLink_Moonwalk(string sLink) {
       return;
     }
     string sKey='', iv='';
-<<<<<<< HEAD
     RE = TRegExpr.Create('"parse","Hex","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","\\w+","(\\w+)"');
     if (RE.Search(sJsData)) {
       sKey = RE.Match(1)+RE.Match(2)+RE.Match(3)+RE.Match(4)+RE.Match(5)+RE.Match(6)+RE.Match(7);
       iv   = RE.Match(8);
     }
-=======
-    RE = TRegExpr.Create(';e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)"');
-    if (RE.Search(sJsData)) 
-      sKey = RE.Match(1)+RE.Match(2)+RE.Match(3)+RE.Match(4)+RE.Match(5)+RE.Match(6)+RE.Match(7);
-    HmsRegExMatch('],r="([^"]+)', sJsData, iv);
->>>>>>> origin/master
     if (sKey=='') { HmsLogMessage(2, mpTitle+': encryption key not found.'); return; }
     if (iv  =='') { HmsLogMessage(2, mpTitle+': encryption  iv not found.'); return; }
 
