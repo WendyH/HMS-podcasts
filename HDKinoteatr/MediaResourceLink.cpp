@@ -1,4 +1,4 @@
-﻿// 2018.09.08
+﻿// 2018.10.01
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -107,10 +107,10 @@ bool GetLink_VK(string sLink) {
 // Получение ссылки с moonwalk.cc
 void GetLink_Moonwalk(string sLink) {
   string sHtml, sData,sLinks, sJsData, sPost, sVer, sQual, sVal, sServ, sVar, sUrlBase, sJSONParams;
-  int i, n; float f; TRegExpr RE,RegExp; bool bHdsDump, bQualLog;
-  TJsonObject JSON, OPTIONS, POSTDATA;
+  int i, n; float f; TRegExpr RE; bool bHdsDump, bQualLog;
+  TJsonObject JSON, OPTIONS;
 
-  string sUserAgent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36';
+  string sUserAgent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36';
   string sHeaders = sLink+'\r\n'+
                     'user-agent: '+sUserAgent+'\r\n';
   // Для Windows XP - отключаем сжатие страниц. Ибо автоматом ответы не распаковываются.
@@ -122,7 +122,6 @@ void GetLink_Moonwalk(string sLink) {
 
   // Проверка установленных дополнительных параметров
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
-  bHdsDump = Pos('--hdsdump'      , mpPodcastParameters) > 0;
   bQualLog = Pos('--qualitylog'   , mpPodcastParameters) > 0;
 
   // Замена домена moonwalk.co и moonwalk.pw на moonwalk.cc
@@ -135,13 +134,12 @@ void GetLink_Moonwalk(string sLink) {
     sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
   }
   HmsRegExMatch2('(.*?//([^/]+))', sLink, sUrlBase, sServ); // Получаем UrlBase и домен
-  //sHeaders += 'Origin: '+sUrlBase+'\r\n';
-  //sHeaders += 'X-Requested-With: XMLHttpRequest\r\n';
-  sHeaders += ':authority: '+sServ+'\r\n';
+  sHeaders += 'Origin: '+sUrlBase+'\r\n'+
+              'X-Requested-With: XMLHttpRequest\r\n'+
+              ':authority: '+sServ+'\r\n';
 
   JSON     = TJsonObject.Create();
   OPTIONS  = TJsonObject.Create();
-  POSTDATA = TJsonObject.Create();
   try {
 
     // Ищем значения параметров (this.options)
@@ -189,38 +187,20 @@ void GetLink_Moonwalk(string sLink) {
       HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests.");
       return;
     }
+    string sKey='', iv='';
+    RE = TRegExpr.Create(';e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)",e\\.\\w+="(\\w+)"');
+    if (RE.Search(sJsData)) 
+      sKey = RE.Match(1)+RE.Match(2)+RE.Match(3)+RE.Match(4)+RE.Match(5)+RE.Match(6)+RE.Match(7);
+    HmsRegExMatch('],r="([^"]+)', sJsData, iv);
+    if (sKey=='') { HmsLogMessage(2, mpTitle+': encryption key not found.'); return; }
+    if (iv  =='') { HmsLogMessage(2, mpTitle+': encryption  iv not found.'); return; }
 
-    string sKey1,sKey2,sKey3,sKey4,sKey5,sKey6,sKey7;
-    string sKey = '19f15a0031b8548acfa8da1f2cdf7f73179ac13f3c4938c8bad5a1c93dd8fe06';
-    string iv = '79e4add175162a762071a11fe45d249f';
-
-    HmsRegExMatch('e\\.a[0-9a-z]+="([^"]+)",', sJsData,sKey1);
-    HmsRegExMatch3('e\\.d[0-9a-z]+="([^"]+)",e\\.e[0-9a-z]+="([^"]+)",e\\.t[0-9a-z]+="([^"]+)",',sJsData,sKey2,sKey3,sKey4);
-    HmsRegExMatch3('e\\.j[0-9a-z]+="([^"]+)",e\\.f[0-9a-z]+="([^"]+)",e\\.n[0-9a-z]+="([^"]+)",', sJsData, sKey5,sKey6,sKey7);
-    sKey = Trim(sKey1+sKey2+sKey3+sKey4+sKey5+sKey6+sKey7);
-    HmsRegExMatch(',\\br="([^"]+)",', sJsData, iv); // snx 2 spell!
-    POSTDATA.LoadFromString(sJSONParams);
-    // Формируем данные для POST
-    sPost = ""; string sData4Encrypt = "{";
-    for (i=POSTDATA.Count-1; i >=0 ; i--) {
-      sVal = POSTDATA.Values[i].AsString;
-      if (sVal=="navigator.userAgent") sVal = sUserAgent;
-      else if (Pos("_mw_adb", sVal)>0) sVal = "false";
-      else if (HmsRegExMatch2('(this.options.(\\w+))', sVal, sVer, sVar)) sVal = ReplaceStr(sVal, sVer, OPTIONS.S[sVar]);
-      else if (HmsRegExMatch('window\\[[\'"](.*?)[\'"]\\]', sVal, sVar) || HmsRegExMatch('\\w+\\.(\\w+)', sVal, sVar)) {
-        HmsRegExMatch('window\\[[\'"]'+sVar+'[\'"]]\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
-        HmsRegExMatch('window\\.'+sVar+'\\s*=\\s*[\'"](.*?)[\'"]', sHtml, sVal);
-        HmsRegExMatch('[\'"]'+sVar+'[\'"][^{};,=]+=\\s*[\'"](.*?)[\'"]', sJsData, sVal);
-      }
-      if (sData4Encrypt!="{") sData4Encrypt += ",";
-      if (!TryStrToInt(sVal, n) && (sVal!="true") && (sVal!="false")) sVal = '"'+Trim(sVal)+'"'; // strings value in quotes
-      sData4Encrypt += '"'+POSTDATA.Names[i]+'":'+sVal;
-    }
-    sData4Encrypt += "}";
+    string sData4Encrypt = '{"a":'+OPTIONS.S['partner_id']+',"b":'+OPTIONS.S['domain_id']+',"c":false,"e":"'+OPTIONS.S['video_token']+'","f":"'+sUserAgent+'"}';
     int padding = 16 - (Length(sData4Encrypt) % 16);
     for (i=0; i < padding; i++) sData4Encrypt += chr(padding); // PKCS7 Padding
     sVal  = HmsCryptCipherEncode("Rijndael", sData4Encrypt, HmsHexToString(sKey), HmsHexToString(iv), cmCBCx, "MIME64");
     sPost = "q="+HmsHttpEncode(sVal);
+    
     sData = HmsSendRequest(sServ, "/vs", 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
     sVar  = "";
     JSON.LoadFromString(sData);
@@ -230,7 +210,7 @@ void GetLink_Moonwalk(string sLink) {
     sLink = JSON.S[sVar];
     if (sLink!="") sData = HmsDownloadURL(sLink, "Referer: "+sHeaders, true);
 
-  } finally { JSON.Free; OPTIONS.Free; POSTDATA.Free; }
+  } finally { JSON.Free; OPTIONS.Free; }
 
   TStringList QLIST = TStringList.Create();
 
