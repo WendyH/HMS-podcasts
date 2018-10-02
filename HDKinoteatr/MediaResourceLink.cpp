@@ -1,4 +1,4 @@
-﻿// 2018.10.01
+﻿// 2018.10.02
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -187,12 +187,15 @@ void GetLink_Moonwalk(string sLink) {
       HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests.");
       return;
     }
+
+    // Получаем данные для шифрования (BIG snx 2 Spell)
     string sKey='', iv='';
-    RE = TRegExpr.Create('"parse","Hex","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","(\\w+)","\\w+","\\w+","(\\w+)"');
-    if (RE.Search(sJsData)) {
-      sKey = RE.Match(1)+RE.Match(2)+RE.Match(3)+RE.Match(4)+RE.Match(5)+RE.Match(6)+RE.Match(7);
-      iv   = RE.Match(8);
-    }
+    HmsRegExMatch(',r=\\[(".*?)\\]', sJsData, sVal);
+    HmsRegExMatch('e\\[o\\("0x4"\\)\\]="([^"]+)', sJsData, sVer);
+    sVal = ReplaceStr(sVal, '"', '');
+    sKey = ExtractWord(25, sVal, ',')+sVer+ExtractWord(32, sVal, ',')+ExtractWord(3, sVal, ',')+ExtractWord(7, sVal, ',')+ExtractWord(12, sVal, ',')+ExtractWord(15, sVal, ',');
+    iv   = ExtractWord(18, sVal, ',');
+    
     if (sKey=='') { HmsLogMessage(2, mpTitle+': encryption key not found.'); return; }
     if (iv  =='') { HmsLogMessage(2, mpTitle+': encryption  iv not found.'); return; }
 
