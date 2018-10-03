@@ -191,9 +191,10 @@ void GetLink_Moonwalk(string sLink) {
     // Получаем данные для шифрования
     string sKey='', iv='';
     HmsRegExMatch(',r=\\[(".*?)\\]', sJsData, sVal);
+    HmsRegExMatch('o\\("0xb"\\)\\]="(.*?)"', sJsData, sVer);
     sVal = ReplaceStr(sVal, '"', '');
-    sKey = ExtractWord(30, sVal, ',')+ExtractWord(4, sVal, ',')+ExtractWord(8, sVal, ',')+ExtractWord(11, sVal, ',')+ExtractWord(13, sVal, ',')+ExtractWord(19, sVal, ',')+ExtractWord(22, sVal, ',');
-    iv   = ExtractWord(24, sVal, ',');
+    sKey = ExtractWord(28, sVal, ',')+ExtractWord(32, sVal, ',')+ExtractWord(4, sVal, ',')+sVer+ExtractWord(11, sVal, ',')+ExtractWord(16, sVal, ',')+ExtractWord(19, sVal, ',');
+    iv   = ExtractWord(22, sVal, ',');
     
     if (sKey=='') { HmsLogMessage(2, mpTitle+': encryption key not found.'); return; }
     if (iv  =='') { HmsLogMessage(2, mpTitle+': encryption  iv not found.'); return; }
