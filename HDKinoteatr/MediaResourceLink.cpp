@@ -1,4 +1,4 @@
-﻿// 2018.10.02
+﻿// 2018.10.03
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -188,13 +188,12 @@ void GetLink_Moonwalk(string sLink) {
       return;
     }
 
-    // Получаем данные для шифрования (BIG snx 2 Spell)
+    // Получаем данные для шифрования
     string sKey='', iv='';
     HmsRegExMatch(',r=\\[(".*?)\\]', sJsData, sVal);
-    HmsRegExMatch('e\\[o\\("0x4"\\)\\]="([^"]+)', sJsData, sVer);
     sVal = ReplaceStr(sVal, '"', '');
-    sKey = ExtractWord(25, sVal, ',')+sVer+ExtractWord(32, sVal, ',')+ExtractWord(3, sVal, ',')+ExtractWord(7, sVal, ',')+ExtractWord(12, sVal, ',')+ExtractWord(15, sVal, ',');
-    iv   = ExtractWord(18, sVal, ',');
+    sKey = ExtractWord(30, sVal, ',')+ExtractWord(4, sVal, ',')+ExtractWord(8, sVal, ',')+ExtractWord(11, sVal, ',')+ExtractWord(13, sVal, ',')+ExtractWord(19, sVal, ',')+ExtractWord(22, sVal, ',');
+    iv   = ExtractWord(24, sVal, ',');
     
     if (sKey=='') { HmsLogMessage(2, mpTitle+': encryption key not found.'); return; }
     if (iv  =='') { HmsLogMessage(2, mpTitle+': encryption  iv not found.'); return; }
