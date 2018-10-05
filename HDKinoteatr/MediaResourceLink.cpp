@@ -1,4 +1,4 @@
-﻿// 2018.10.03
+﻿// 2018.10.05
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -189,15 +189,23 @@ void GetLink_Moonwalk(string sLink) {
     }
 
     // Получаем данные для шифрования
-    string sKey='', iv='';
+    string sKey='', iv='', a1, a2, a3, a4, a5;
     HmsRegExMatch(',r=\\[(".*?)\\]', sJsData, sVal);
-    HmsRegExMatch('o\\("0xb"\\)\\]="(.*?)"', sJsData, sVer);
     sVal = ReplaceStr(sVal, '"', '');
-    sKey = ExtractWord(28, sVal, ',')+ExtractWord(32, sVal, ',')+ExtractWord(4, sVal, ',')+sVer+ExtractWord(11, sVal, ',')+ExtractWord(16, sVal, ',')+ExtractWord(19, sVal, ',');
-    iv   = ExtractWord(22, sVal, ',');
     
-    if (sKey=='') { HmsLogMessage(2, mpTitle+': encryption key not found.'); return; }
-    if (iv  =='') { HmsLogMessage(2, mpTitle+': encryption  iv not found.'); return; }
+    HmsRegExMatch('0x0"\\)]="(.*?)"', sJsData, a1);
+    HmsRegExMatch('e2a9"\\]="(.*?)"', sJsData, a2);
+    HmsRegExMatch('0x5"\\)]="(.*?)"', sJsData, a3);
+    HmsRegExMatch('0xb"\\)]="(.*?)"', sJsData, a4);
+    HmsRegExMatch('0xf"\\)]="(.*?)"', sJsData, a5);
+    
+    try {
+      sKey = a1+a2+a3+ExtractWord(14, sVal, ',')+a4+a5+ExtractWord(24, sVal, ',');
+      iv   = ExtractWord(27, sVal, ',');
+    } finally {}
+    
+    if (Length(sKey)!=64) { HmsLogMessage(2, mpTitle+': encryption key not found.'); return; }
+    if (iv=='')           { HmsLogMessage(2, mpTitle+': encryption  iv not found.'); return; }
 
     string sData4Encrypt = '{"a":'+OPTIONS.S['partner_id']+',"b":'+OPTIONS.S['domain_id']+',"c":false,"e":"'+OPTIONS.S['video_token']+'","f":"'+sUserAgent+'"}';
     int padding = 16 - (Length(sData4Encrypt) % 16);
