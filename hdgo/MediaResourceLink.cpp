@@ -438,7 +438,7 @@ void CreateInfoLinks() {
 string LoadHdgoHtml(string sLink, string &sReferer) {
   string sHtml; HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
   sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.cc");
-  if (HmsRegExMatch('<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
+  if (HmsRegExMatch('[^\']<iframe[^>]+src="(.*?)"', sHtml, sLink)) {
     if (LeftCopy(sLink, 2)=="//") sLink = "http:"+Trim(sLink);
     HmsRegExMatch("(https?://.*?/)", sLink, sReferer);
     sHtml = HmsDownloadURL(sLink, "Referer: http://hdgo.cc");
