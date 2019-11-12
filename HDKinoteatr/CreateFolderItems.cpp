@@ -1,4 +1,4 @@
-﻿// 2018.04.04
+﻿// 2019.11.12
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -55,6 +55,14 @@ void CreateErrorItem(string sMsg) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Создание информационной ссылки
+void CreateInfoItem(string sKey, string sVal) {
+  THmsScriptMediaItem Item; sVal = Trim(sVal);
+  if (sVal=="") return;
+  CreateMediaItem(FolderItem, sKey+': '+sVal, 'Info'+sVal, 'http://wonky.lostcut.net/vids/info.jpg', 7);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Создание папки или подкаста
 THmsScriptMediaItem CreateFolder(THmsScriptMediaItem Parent, string sName, string sLink, string sImg=mpThumbnail) {
   THmsScriptMediaItem Item = Parent.AddFolder(sLink); // Создаём папку с указанной ссылкой
@@ -68,82 +76,12 @@ THmsScriptMediaItem CreateFolder(THmsScriptMediaItem Parent, string sName, strin
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Создание списка серий сериала с Moonwalk.cc
-void CreateMoonwallkLinks(string sLink, string sKPID='') {
-  string sData; TJsonObject PLAYLIST;
-  // Пытаемся получить ID кинопоиска
-  if (sKPID=='') {
-    sKPID = Trim(FolderItem[mpiKPID]); // Получаем запомненный kinopoisk ID
-    if (sKPID=='') HmsRegExMatch('/images/(film|film_big)/(\\d+)', mpThumbnail, sKPID, 2);
-    if (sKPID=='') HmsRegExMatch('/iphone360_(\\d+)', mpThumbnail, sKPID);
-  }
-  
-  sData = HmsDownloadURL(gsAPIUrl+'series?url='+HmsHttpEncode(sLink)+'&kpid='+sKPID, "Accept-Encoding: gzip, deflate", true);
-  sData = HmsUtf8Decode(sData);
-  PLAYLIST = TJsonObject.Create();
-  try {
-    PLAYLIST.LoadFromString(sData);
-    CreateVideosFromJsonPlaylist(PLAYLIST.AsArray(), FolderItem);
-  } finally { PLAYLIST.Free; }
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // Конвертирование строки даты вида ГГГГ-ММ-ДД в дату
 TDateTime ConvertToDate(string sData) {
   string y, m, d, h, i, s;
   HmsRegExMatch3('(\\d+)-(\\d+)-(\\d+)', sData, y, m, d);
   HmsRegExMatch3('(\\d+):(\\d+):(\\d+)', sData, h, i, s);
   return StrToDateDef(d+'.'+m+'.'+y, Now);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Создание дерева ссылок из объекта Json
-void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder) {
-  int i; string sName, sLink, sVal, sImg, sFmt; TJsonObject JOBJECT; THmsScriptMediaItem Item;
-  
-  if (JARRAY==nil) return;
-  for (i=0; i<JARRAY.Length; i++) {
-    sFmt = "%.2d %s"; if (JARRAY.Length > 99) sFmt = "%.3d %s";
-    JOBJECT = JARRAY[i];
-    if (JOBJECT.A["playlist"] != nil) {
-      if (JARRAY.Length==1) { // Если сезон один, сразу создаём серии без папки
-        CreateVideosFromJsonPlaylist(JOBJECT.A["playlist"], Folder);
-      } else {
-        sName = JOBJECT.S["comment"];
-        Item  = Folder.AddFolder(sName);
-        Item[mpiCreateDate] = VarToStr(IncTime(gStart,0,-gnTotalItems,0,0)); gnTotalItems++;
-        CreateVideosFromJsonPlaylist(JOBJECT.A["playlist"], Item);
-      }
-    } else {
-      sLink = JOBJECT.S["file"   ];
-      sName = JOBJECT.S["comment"];
-      sImg  = JOBJECT.S["image"  ]; if (sImg=='') sImg = mpThumbnail;
-
-      // Форматируем номер в два знака
-      if (sName=='Фильм') 
-        sName = mpTitle;
-      else if (HmsRegExMatch("^(\\d+)", sName, sVal)) 
-        sName = ReplaceStr(sName, sVal, Trim(Format(sFmt, [StrToInt(sVal), ""])));
-      else
-        sName = Format(sFmt, [i+1, sName]);
-
-      if ((Pos('/serial/', sLink)>0) && (Pos('episode', sLink)<1))
-        CreateFolder(Folder, sName, sLink, sImg);
-
-      else if (Pos('youtu', sLink) > 0) {
-        if (Pos('Трейлер', sName)>0)
-          CreateMediaItem(Folder, sName, sLink, sImg, 230);
-        else
-          CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
-
-      } else {
-        Item = CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
-        if (JOBJECT.B["subs"]) Item[mpiSubtitleLanguage] = HmsSubtitlesDirectory+'\\'+Item.ItemID+'.srt';
-        FillVideoInfo(Item);
-      }
-
-    }
-  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -162,48 +100,185 @@ void FillVideoInfo(THmsScriptMediaItem Item) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void CreateLinksOfVideo() {
-  string sData, sName, sLink, sID; TJsonObject VIDEO, PLAYLIST; THmsScriptMediaItem Item;
-  VIDEO    = TJsonObject.Create();
-  PLAYLIST = TJsonObject.Create();
-  
-  sData = Trim(FolderItem[mpiJsonInfo]);
-  if (sData=='') {
-    if (!HmsRegExMatch('.*/(\\d+)-', mpFilePath, sID)) return;
-    sData = HmsDownloadURL(gsAPIUrl+'videos?id='+sID, "Accept-Encoding: gzip, deflate", true);
-    sData = HmsUtf8Decode(sData);
+// Нормализация имени серии
+string NormName(string sName) {
+  string sNum, sOther;
+  sName = ReplaceStr(ReplaceStr(HmsHtmlToText(sName), '\r', ''), '\n', ' ');
+  if (HmsRegExMatch2('^(\\d+)\\s*(.*)', sName, sNum, sOther)) {
+    sName = Format('%.2d %s', [StrToInt(sNum), sOther]);
   }
+  return sName;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Создание ссылок на фильм или сериал
+void CreateLinks() {
+  string sHtml, sData, sName, sLink, sVal, sTrans, sQual, sAdd, sSeasonName, sGrp, sAPI, sImg, sHeaders; 
+  THmsScriptMediaItem Item; int i, n, nTime; TJsonObject VIDEO, PLAYLIST, VLINKS; TJsonArray SEASONS, EPISODES;
+  VIDEO    = TJsonObject.Create(); TRegExpr RE;
+  PLAYLIST = TJsonObject.Create();
+  VLINKS   = TJsonObject.Create();
   
   try {
-    VIDEO.LoadFromString(sData);
-    if (VIDEO.IsType(jtArray)) VIDEO = VIDEO.AsArray[0];
-    gStart = ConvertToDate(VIDEO.S['date']); // Устанавливаем началную точку для даты ссылок
+    VIDEO.LoadFromString(FolderItem[mpiJsonInfo]);
+    
+    gStart = ConvertToDate(VIDEO.S['date']); // Устанавливаем начальную точку для даты ссылок
     gnDefaultTime = VIDEO.I['time'];
     sLink = VIDEO.S['link'];
     sName = VIDEO.S['name'];
-    if (VIDEO.B['isserial']) {
-      if (VIDEO.S['name_eng']!='') mpSeriesTitle = VIDEO.S['name_eng'];
-      else                         mpSeriesTitle = VIDEO.S['name'];
-      HmsRegExMatch('^(.*?)\\s/\\s', mpSeriesTitle, mpSeriesTitle);
-      FolderItem[mpiSeriesTitle] = mpSeriesTitle;
-      FolderItem[mpiYear] = VIDEO.I['year'];
-    }
-    if (HmsRegExMatch('(\\[|\\{)', sLink, '')) {
-      PLAYLIST.LoadFromString(sLink);
-      CreateVideosFromJsonPlaylist(PLAYLIST.AsArray(), FolderItem);
-    } else {
-      
-      if (HmsRegExMatch('/serial/', sLink, '')) {
-        CreateMoonwallkLinks(sLink, VIDEO.S['kpid']); 
-      } else {
-        Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime);
-        Item.CopyProperties(FolderItem.ItemParent, [mpiGenre,mpiDirector,mpiComposer,mpiActor,mpiAuthor,mpiYear,mpiComment]);
+    
+    try {
+      VLINKS.LoadFromString(sLink);
+      try {
+        if (VLINKS.B['videocdn']) {
+          sLink = VLINKS.S['videocdn\\iframe'];
+          sName = Trim('[videocdn] '+VLINKS.S['videocdn\\translate']+' '+VLINKS.S['videocdn\\quality']);
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL("https://hms.lostcut.net/proxy.php?"+sLink, 'Referer: '+mpFilePath));
+            HmsRegExMatch('id="files"\\s*value="(.*?)"', sHtml, sVal);
+            PLAYLIST.LoadFromString(HmsHtmlDecode(sVal));
+            SEASONS = PLAYLIST.A[PLAYLIST.Names[0]];
+            for (i=0; i<SEASONS.Length; i++) {
+              EPISODES = SEASONS[i].A['folder'];
+              if (EPISODES==nil) {
+                // Нет сезонов - есть только серии
+                EPISODES = SEASONS;
+                sSeasonName = '';
+              } else {
+                sSeasonName = NormName(SEASONS[i].S['comment']);
+                EPISODES = SEASONS[i].A['folder'];
+              }
+              for (n=0; n<EPISODES.Length; n++) {
+                sData = EPISODES[n].S['file'];
+                sName = NormName(EPISODES[n].S['comment']);
+                RE = TRegExpr.Create('\\[(.*?)\\]([^,\\s"\']+)');
+                if (RE.Search(sData)) do {
+                  sQual = RE.Match(1);
+                  sLink = 'http:'+RE.Match(2);
+                  sGrp  = 'Videocdn '+sQual+'\\'+sSeasonName;
+                  Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime, sGrp);
+                } while (RE.SearchAgain());
+              }
+            }
+            
+          } else {
+            Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+        } // if (VLINKS.B['videocdn'])
+      } except { }
+      try {
+        if (VLINKS.B['collaps']) {
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL(VLINKS.S['collaps\\iframe'], 'Referer: '+mpFilePath));
+            HmsRegExMatch('apiBaseUrl:\\s*[\'"](.*?)[\'"]', sHtml, sAPI);
+            HmsRegExMatch('franchise:\\s*(\\d+)'          , sHtml, sVal);
+            sData = HmsDownloadURL(sAPI+'/season/by-franchise/?id='+sVal+'&host=zombie-film.com-embed');
+            PLAYLIST.LoadFromString(sData);
+            SEASONS = PLAYLIST.AsArray;
+            for (i=0; i<SEASONS.Length; i++) {
+              sVal = SEASONS[i].S['id'];
+              sSeasonName = SEASONS[i].S['season']+' сезон';
+              sData = HmsDownloadURL(sAPI+'/video/by-season/?id='+sVal+'&host=zombie-film.com-embed');
+              PLAYLIST.LoadFromString(sData);
+              EPISODES = PLAYLIST.AsArray;
+              for (n=0; n<EPISODES.Length; n++) {
+                sImg  = EPISODES[n].S['poster\\small'];
+                nTime = EPISODES[n].I['duration'];
+                sVal  = EPISODES[n].S['episodeName']; if (sVal=='') sVal = 'серия';
+                sName = Format('%.2d %s', [EPISODES[n].I['episode'], sVal]);
+                PLAYLIST = EPISODES[n].O['urlQuality'];
+                for (int q=0; q<PLAYLIST.Count; q++) {
+                  sQual = PLAYLIST.Names[q];
+                  sLink = PLAYLIST.S[sQual];
+                  sGrp = 'Collaps '+sQual+'\\'+sSeasonName;
+                  Item = CreateMediaItem(FolderItem, sName, sLink, sImg, nTime, sGrp);
+                }
+              }
+            }
+          } else {
+            Item = CreateMediaItem(FolderItem, '[collaps] '+VIDEO.S['name'], VLINKS.S['collaps\\iframe'], mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+          
+        } // if (VLINKS.B['collaps'])
+      } except { }
+      try {
+        if (VLINKS.B['iframe']) {
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL(VLINKS.S['iframe\\iframe'], 'Referer: '+mpFilePath));
+            //HmsRegExMatch('background:\\s*url\\((https.*?)\\)', sHtml, sImg);
+            RE = TRegExpr.Create('<a[^>]+href=[\'"](.*?)[\'"][^>]*>Сезон\\s*\\d+</a>', PCRE_CASELESS);
+            if (RE.Search(sHtml)) do {
+              sSeasonName = NormName(RE.Match(0));
+              if (Pos(RE.Match, VLINKS.S['iframe\\iframe'])>0) 
+                sData = sHtml;
+              else 
+                sData = HmsUtf8Decode(HmsDownloadURL('https://videoframe.at'+RE.Match, 'Referer: '+mpFilePath));
+              TRegExpr RESeries = TRegExpr.Create('<a[^>]+href=[\'"](.*?)[\'"][^>]*>\\d+\\s*серия</a>', PCRE_CASELESS);
+              if (RESeries.Search(sData)) do {
+                sLink = 'https://videoframe.at'+RESeries.Match(1);
+                sName = NormName(RESeries.Match(0));
+                sGrp  = 'iframe\\'+sSeasonName;
+                Item = CreateMediaItem(FolderItem, sName, sLink, sImg, gnDefaultTime, sGrp);
+              } while (RESeries.SearchAgain());
+            } while (RE.SearchAgain());
+          } else {
+            Item = CreateMediaItem(FolderItem, '[iframe] '+VIDEO.S['name'], VLINKS.S['iframe\\iframe'], mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+          
+        } // if (VLINKS.B['iframe'])
+      } except { }
+      try {
+        if (VLINKS.B['hdvb']) {
+          if (VIDEO.B['isserial']) {
+            string sSeriesData, sOriginalLink;
+            sOriginalLink = VLINKS.S['hdvb\\iframe'];
+            sHtml = HmsUtf8Decode(HmsDownloadURL(sOriginalLink, 'Referer: '+mpFilePath, true));
+            HmsRegExMatch('name="translation"><option value="([^"]+)" selected', sHtml, sTrans);
+            // Есть зесозы? Если нет - деалем так, чтобы нашёлся один, текущий
+            if (!HmsRegExMatch('(<select[^>]+id="seasons".*?</select>)', sHtml, sData)) {
+              sData = "<option value="" selected></option>"; 
+            }
+            RE = TRegExpr.Create('<option[^>]+value="(\\d+)".*?</option>', PCRE_SINGLELINE);
+            try {
+              if (RE.Search(sData)) do {
+                mpSeriesSeasonNo = RE.Match;
+                if (Pos('selected', RE.Match(0))>0)
+                  sSeriesData = sHtml;
+                else
+                  sSeriesData = HmsUtf8Decode(HmsDownloadURL(sOriginalLink+'?s='+mpSeriesSeasonNo+'&t='+sTrans, 'Referer: '+mpFilePath, true));
+                HmsRegExMatch('(<select[^>]+id="episodes".*?</select>)', sSeriesData, sSeriesData);
+                RESeries = TRegExpr.Create('<option[^>]+value="(\\d+)".*?</option>', PCRE_SINGLELINE);
+                if (RESeries.Search(sSeriesData)) do {
+                  sLink = VLINKS.S['hdvb\\iframe']+'?e='+RESeries.Match+'&s='+mpSeriesSeasonNo+'&t='+sTrans;
+                  sName = NormName(RESeries.Match(0));
+                  sGrp  = 'hdvb '+VLINKS.S['hdvb\\translate']+'\\Сезон '+mpSeriesSeasonNo;
+                  Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime, sGrp);
+                } while (RESeries.SearchAgain());
+              } while (RE.SearchAgain());
+            } finally { RE.Free; RESeries.Free; }
+          } else {
+            sName = '[hdvb] '+VLINKS.S['hdvb\\translate']+' '+VLINKS.S['hdvb\\quality'];
+            Item  = CreateMediaItem(FolderItem, sName, VLINKS.S['hdvb\\iframe'], mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+          
+        } // if (VLINKS.B['hdvb'])
+      } except { }
+      if (VLINKS.B['trailer']) {
+        sLink = VLINKS.S['trailer\\iframe'];
+        Item = CreateMediaItem(FolderItem, 'Трейлер', sLink, mpThumbnail, gnDefaultTime);
+        if (HmsRegExMatch('/embed/([^/]+)', sLink, sVal))
+          Item[mpiThumbnail] = 'http://img.youtube.com/vi/'+sVal+'/0.jpg';
+        Item[mpiTimeLength] = '00:03:30';
       }
-      
-    }
+    } except { HmsLogMessage(1, "В ссылках на фильм содержаться плохие данные. Кина не будет. "+sLink); }
     
     // Специальная папка добавления/удаления в избранное
     if (VIDEO.B['isserial'] && (Pos('--controlfavorites', mpPodcastParameters)>0)) {
+      // Проверка, находится ли сериал в избранном?
       Item = HmsFindMediaFolder(Podcast.ItemID, 'favorites');
       if (Item!=nil) {
         bool bExist = HmsFindMediaFolder(Item.ItemID, mpFilePath) != nil;
@@ -213,7 +288,18 @@ void CreateLinksOfVideo() {
       }
     } 
     
-  } finally { VIDEO.Free; PLAYLIST.Free; }
+    // Создание информационных ссылок
+    if (Pos('--infoitems', mpPodcastParameters) > 0) {
+      CreateInfoItem('Страна'  , VIDEO.S["country" ]);
+      CreateInfoItem('Жанр'    , VIDEO.S["genre"   ]);
+      CreateInfoItem('Год'     , VIDEO.S["year"    ]);
+      CreateInfoItem('Режиссёр', VIDEO.S["director"]);
+      if (VIDEO.B["rating_kp"  ]) CreateInfoItem('Рейтинг КП'  , VIDEO.S["rating_kp"  ]+' ('+VIDEO.S["rating_kp_votes"  ]+')');
+      if (VIDEO.B["rating_imdb"]) CreateInfoItem('Рейтинг IMDb', VIDEO.S["rating_imdb"]+' ('+VIDEO.S["rating_imdb_votes"]+')');
+      CreateInfoItem('Перевод' , VIDEO.S["translation"]);
+    }
+    
+  } finally { VIDEO.Free; PLAYLIST.Free; VLINKS.Free; }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -245,7 +331,10 @@ void CreateVideosList(string sParams='') {
       case 'translations': { sParams='translation='; }
       default            : { sParams='q=';           }
     }
-    sParams += HmsHttpEncode(HmsUtf8Encode(mpTitle));
+    if (ProgramVersion >= '3.0')
+      sParams += HmsHttpEncode(mpTitle);
+    else
+      sParams += HmsHttpEncode(HmsUtf8Encode(mpTitle));
   }
   
   // Получение данных и цикл создания ссылок на видео
@@ -352,33 +441,6 @@ void CheckPodcastUpdate() {
 } //Вызов в главной процедуре: if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate();
 
 ///////////////////////////////////////////////////////////////////////////////
-// Проверка актуальности версии функции GetLink_Moonwalk в скриптах
-void CheckMoonwalkFunction() {
-  string sData, sFuncOld, sFuncNew; TJsonObject JSON;
-  int nTimePrev, nTimeNow, mpiTimestamp=100862, mpiMWVersion=100821; 
-  string sPatternMoonwalkFunction = "(// Получение ссылки с moonwalk.cc.*?// Конец функции поулчения ссылки с moonwalk.cc)";
-  
-  // Если после последней проверки прошло меньше получаса - валим
-  if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 3600)) return; // раз в час
-  Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
-  if (HmsRegExMatch(sPatternMoonwalkFunction, Podcast[550], sFuncOld, 1, PCRE_SINGLELINE)) {
-    sData = HmsUtf8Decode(HmsDownloadURL("https://api.github.com/gists/3092dc755ad4a6c412e2fcd17c28d096", "Accept-Encoding: gzip, deflate", true));
-    JSON  = TJsonObject.Create();
-    try {
-      JSON.LoadFromString(sData);
-      sFuncNew = JSON.S['files\\GetLink_Moonwalk.cpp\\content'];
-      if ((sFuncNew!='') && (Podcast[mpiMWVersion]!=JSON.S['updated_at'])) {
-        HmsRegExMatch(sPatternMoonwalkFunction, sFuncNew, sFuncNew, 1, PCRE_SINGLELINE);
-        Podcast[550] = ReplaceStr(Podcast[550], sFuncOld, sFuncNew); // Заменяем старую функцию на новую
-        Podcast[mpiMWVersion] = JSON.S['updated_at'];
-        HmsLogMessage(2, Podcast[mpiTitle]+": Обновлена функция получения ссылки с moonwalk.cc!");
-      }
-    } finally { JSON.Free; }
-  }
-  //Вызов в главной процедуре: if (Pos('--noupdatemoonwalk', mpPodcastParameters)<1) CheckMoonwalkFunction();
-}
-
-///////////////////////////////////////////////////////////////////////////////
 //                     Г Л А В Н А Я   П Р О Ц Е Д У Р А                     //
 {
   // Проверка на упоротых, которые пытаются запустить "Обновление подкастов" для всего подкаста разом
@@ -390,11 +452,9 @@ void CheckMoonwalkFunction() {
   FolderItem.DeleteChildItems();
 
   if ((Pos('--nocheckupdates' , mpPodcastParameters)<1) && (mpComment=='--update')) CheckPodcastUpdate(); // Проверка обновлений подкаста
-  if (Pos('--noupdatemoonwalk', mpPodcastParameters)<1) CheckMoonwalkFunction();
  
-  if      (Pos('/serial/', mpFilePath) > 0) CreateMoonwallkLinks(mpFilePath); // вариант перевода сериала
-  else if (LeftCopy(mpFilePath, 4)=='http') CreateLinksOfVideo(); // создание ссылок на серии в избранном
-  else CreateVideosList(mpFilePath);
+  if (LeftCopy(mpFilePath, 4)=='http') CreateLinks(); // создание ссылок на серии
+  else                                 CreateVideosList(mpFilePath);
   
   HmsLogMessage(1, Podcast[mpiTitle]+' "'+mpTitle+'": Создано элементов - '+IntToStr(gnTotalItems));
 }

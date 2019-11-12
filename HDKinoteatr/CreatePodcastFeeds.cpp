@@ -1,4 +1,4 @@
-﻿// 2017.06.07
+﻿// 2019.11.12
 ///////////////////////  Создание структуры подкаста  /////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -41,9 +41,9 @@ THmsScriptMediaItem CreateDynamicItem(THmsScriptMediaItem prntItem, string sTitl
   THmsScriptMediaItem Folder = prntItem.AddFolder(sLink, false, 32);
   Folder[mpiTitle     ] = sTitle;
   Folder[mpiCreateDate] = VarToStr(IncTime(Now,0,-prntItem.ChildCount,0,0));
-  Folder[200] = 5;           // mpiFolderType
-  Folder[500] = sScript;     // mpiDynamicScript
-  Folder[501] = 'C++Script'; // mpiDynamicSyntaxType
+  Folder[200] = 5;         // mpiFolderType
+  Folder[500] = sScript;   // mpiDynamicScript
+  Folder[501] = 'JScript'; // mpiDynamicSyntaxType
   Folder[mpiFolderSortOrder] = -mpiCreateDate;
   return Folder;
 }
@@ -51,8 +51,8 @@ THmsScriptMediaItem CreateDynamicItem(THmsScriptMediaItem prntItem, string sTitl
 ///////////////////////////////////////////////////////////////////////////////
 // Замена в тексте загруженного скрипта значения текстовой переменной
 void ReplaceVarValue(string &sText, string sVarName, string sNewVal) {
-  string sVal, sVal2;
-  if (HmsRegExMatch2("("+sVarName+"\\s*?=.*?';)", sText, sVal, sVal2)) {
+  char sVal, sVal2;
+  if (HmsRegExMatch2("("+sVarName+"\\s*?=.*?';)", sText, sVal, sVal2, PCRE_SINGLELINE)) {
     HmsRegExMatch(sVarName+"\\s*?=\\s*?'(.*)'", sVal, sVal2);
     sText = ReplaceStr(sText, sVal, ReplaceStr(sVal , sVal2, sNewVal));
   }
@@ -60,31 +60,28 @@ void ReplaceVarValue(string &sText, string sVarName, string sNewVal) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Создание папки ПОИСК (с загрузкой скрипта с форума homemediaserver.ru)
-void CreateSearchFolder(THmsScriptMediaItem Parent, string sTitle) {
-  string sScript='', sLink, sHtml, sRE, sVal; THmsScriptMediaItem Folder;
+void CreateSearchFolder(THmsScriptMediaItem prntItem, string sTitle) {
+  string sScript='', sHtml; THmsScriptMediaItem Folder;
   
   // Да да, загружаем скрипт с сайта форума HMS
-  sHtml = HmsUtf8Decode(HmsDownloadURL('http://homemediaserver.ru/forum/viewtopic.php?f=15&t=2793&p=17395#p17395', '', true));
-  HmsRegExMatch('BeginDynamicSearchScript\\*/(.*?)/\\*EndDynamicSearchScript', sHtml, sScript, 1, PCRE_SINGLELINE);
+  sHtml = HmsUtf8Decode(HmsDownloadURL('http://homemediaserver.ru/forum/viewtopic.php?f=15&t=2793&p=17395'));
+  HmsRegExMatch('BeginSearchJScript\\*/(.*?)/\\*EndSearchJScript', sHtml, sScript, 1, PCRE_SINGLELINE);
   sScript = HmsHtmlToText(sScript, 1251);
   sScript = ReplaceStr(sScript, #160, ' ');
   
   // И меняем значения переменных на свои
-  ReplaceVarValue(sScript, 'gsSuggestQuery'  , gsAPIUrl+'videos?q=');
-  ReplaceVarValue(sScript, 'gsSuggestRegExpr', '"name":"(.*?)"');
-  ReplaceVarValue(sScript, 'gsSuggestMethod' , 'GET');
-  //sScript = ReplaceStr(sScript, 'gnSuggestNoUTFEnc = 0', 'gnSuggestNoUTFEnc = 1');
+  ReplaceVarValue(sScript, 'gsSuggestUrl', gsAPIUrl+'videos?q=');
+  //ReplaceVarValue(sScript, 'gsSuggestResultCut', '');
+  ReplaceVarValue(sScript, 'gsSuggestRegExp', '"name":"(.*?)"');
+  //ReplaceVarValue(sScript, 'gsSuggestMethod' , 'POST');
+  //sScript = ReplaceStr(sScript, 'gnSuggestNoUTFEnc  = 0', 'gnSuggestNoUTFEnc  = 1');
   
-  Folder = Parent.AddFolder(sTitle, true);
+  Folder = prntItem.AddFolder(sTitle, true);
   Folder[mpiCreateDate     ] = VarToStr(IncTime(gStart,0,-gnTotalItems,0,0));
   Folder[mpiFolderSortOrder] = "-mpCreateDate";
   gnTotalItems++;
   
   CreateDynamicItem(Folder, '"Набрать текст"', '-SearchCommands', sScript);
-  
-  CreateFolder(Folder, 'Режиссёры' , 'directors' , '', true);
-  CreateFolder(Folder, 'Актёры'    , 'actors'    , '', true);
-  CreateFolder(Folder, 'Продюсеры' , 'producers' , '', true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

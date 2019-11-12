@@ -1,4 +1,4 @@
-﻿// 2018.10.11
+﻿// 2019.11.12
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -24,316 +24,6 @@ THmsScriptMediaItem GetRoot() {
   return Podcast;
 }
 
-// -------------------------------------------- Получение ссылки на vk.com ----
-bool GetLink_VK(string sLink) {
-  string sHtml, sVal, host, uid, vkid, vtag, max_hd, no_flv, res, extra, cat;
-  string ResolutionList='0:240, 1:360, 2:480, 3:720', sQAval, sQSel, sID;
-  int i, iPriority=0, iMinPriority=99; int nFlag=0; 
-  
-  sHtml = HmsDownloadURL(sLink, 'Referer: '+sLink, true);
-  
-  if ((sHtml=="") || !HmsRegExMatch('vtag["\':=\\s]+([0-9a-z]+)', sHtml, vtag)) {
-    //LogInSiteVK();
-    if (HmsRegExMatch2("oid=(.*?)&.*?id=(.*?)&", sLink, sVal, sID))
-      sLink = "https://vk.com/video"+sVal+"_"+sID;
-    sHtml = HmsDownloadUrl(sLink, 'Referer: '+sLink, true);
-  }
-  
-  sHtml = ReplaceStr(sHtml, '\\', '');
-  host = ''; max_hd = '2';
-  
-  sLink = '';
-  HmsRegExMatch('--quality=(\\d+)', mpPodcastParameters, sQSel);
-  if (sQSel!='') HmsRegExMatch('"url'+sQSel+'":"(.*?)"', sHtml, sLink);
-  if (sLink=='') HmsRegExMatch('"url720":"(.*?)"', sHtml, sLink);
-  if (sLink=='') HmsRegExMatch('"url480":"(.*?)"', sHtml, sLink);
-  if (sLink=='') HmsRegExMatch('"url360":"(.*?)"', sHtml, sLink);
-  if (sLink=='') HmsRegExMatch('"url240":"(.*?)"', sHtml, sLink);
-  if (sLink!='') {
-    MediaResourceLink = HmsJsonDecode(sLink);
-    return;
-  }
-  
-  if (!HmsRegExMatch('vtag["\':=\\s]+([0-9a-z]+)', sHtml, vtag)) {
-    if (HmsRegExMatch('(<div[^>]+video_ext_msg.*?</div>)', sHtml, sLink) ||
-    HmsRegExMatch('<div style="position:absolute; top:50%; text-align:center; right:0pt; left:0pt;.*?>(.*?)</div>', sHtml, sLink)) {
-      HmsLogMessage(2, PodcastItem.ItemOrigin.ItemParent[mpiTitle]+': vk.com сообщает - '+HmsHtmlToText(sLink));
-      if (random > 0.5) MediaResourceLink = 'http://wonky.lostcut.net/vids/enotallow.avi';
-      else VideoMessage('VK.COM СООБЩАЕТ:\n\n'+HmsHtmlToText(sLink));
-    } else {
-      HmsLogMessage(2, mpTitle+': не удалось обработать ссылку на vk.com');
-      MediaResourceLink = 'http://wonky.lostcut.net/vids/error_getlink.avi';
-    }
-    return true;
-  }
-  HmsRegExMatch('[^a-z]host[=:"\'\\s]+(.*?)["\'&;,]', sHtml, host  );
-  HmsRegExMatch('[^a-z]uid[=:"\'\\s]+([0-9]+)'      , sHtml, uid   );
-  HmsRegExMatch('no_flv.*?(\\d)'                    , sHtml, no_flv);
-  HmsRegExMatch('(?>hd":"|hd=|video_max_hd.*?)(\\d)', sHtml, max_hd);
-  HmsRegExMatch('[^a-z]vkid[=:"\'\\s]+([0-9]+)'     , sHtml, vkid  );
-  HmsRegExMatch('extra=([\\w-]+)'                   , sHtml, extra );
-  HmsRegExMatch('/(\\d+)/u\\d+/'                    , sHtml, cat   );
-  
-  HmsRegExMatch(max_hd+':(\\d+)',            ResolutionList, res   );
-  
-  sQAval = 'Доступное качество: '; sQSel = '';
-  
-  // Если включен приоритет форматов, то ищем ссылку на более приоритетное качество
-  if (gbQualityLog || (mpPodcastMediaFormats!='')) for (i=StrToIntDef(max_hd, 3); i>=0; i--) {
-    HmsRegExMatch(IntToStr(i)+':(\\d+)', ResolutionList, sVal);
-    sQAval += sVal + '  ';
-    if (sQSel != '') {
-      if (StrToIntDef(res, 0)>StrToIntDef(sQSel, 0)) res = sVal;
-    } else if (mpPodcastMediaFormats != '') {
-      iPriority = HmsMediaFormatPriority(StrToIntDef(sVal, 0), mpPodcastMediaFormats);
-      if ((iPriority>=0)&&(iPriority<iMinPriority)) {iMinPriority = iPriority; res=sVal;}
-    }
-  }
-  if (gbQualityLog) HmsLogMessage(1, mpTitle+': '+sQAval+'Выбрано: '+res);
-  
-  if (LeftCopy(uid, 1)!='u') uid = 'u' + Trim(uid);
-  if (Trim(host)=='') HmsRegExMatch('ajax.preload.*?<img[^>]+src="(http://.*?/)', sHtml, host);
-  
-  if (uid=='0') MediaResourceLink = host+'assets/videos/'+vtag+''+vkid+'.vk.flv';
-  else          MediaResourceLink = host + uid+'/videos/'+vtag+'.'+res+'.mp4';
-  if (Trim(extra)!='') MediaResourceLink += '?extra='+extra;
-  if (Trim(cat  )!='') MediaResourceLink = ReplaceStr(MediaResourceLink, '/'+uid, '/'+cat+'/'+uid);
-  
-  HmsRegExMatch(";url"+res+"=(.*?)&", sHtml, MediaResourceLink);
-  return true;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Получение ссылки с moonwalk.cc
-void GetLink_Moonwalk(string sLink) {
-  string sHtml, sData,sLinks, sJsData, sPost, sVer, sQual, sVal, sServ, sVar, sUrlBase, sJSONParams;
-  int i, n; float f; TRegExpr RE; bool bHdsDump, bQualLog;
-  TJsonObject JSON, OPTIONS;
-
-  string sUserAgent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36';
-  string sHeaders = sLink+'\r\n'+
-                    'user-agent: '+sUserAgent+'\r\n';
-  // Для Windows XP - отключаем сжатие страниц. Ибо автоматом ответы не распаковываются.
-  if (StrToFloatDef(RegistryRead("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\CurrentVersion"), 0) < 6) {
-    sHeaders += 'accept-encoding: identity\r\n';
-  } else {
-    sHeaders += 'accept-encoding: gzip, deflate, br\r\n';
-  }
-
-  // Проверка установленных дополнительных параметров
-  HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
-  bQualLog = Pos('--qualitylog'   , mpPodcastParameters) > 0;
-
-  // Замена домена moonwalk.co и moonwalk.pw на moonwalk.cc
-  HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
-  sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
-
-  if (HmsRegExMatch('<iframe[^>]+src="(http.*?)"', sHtml, sLink)) {
-    // Если внутри есть ссылка на iframe - загружаем его
-    HmsRegExReplace('(.*?moonwalk.)(co|pw)(.*)', sLink, '$1cc$3', sLink);
-    sHtml = HmsDownloadURL(sLink, 'Referer: '+sHeaders);
-  }
-  HmsRegExMatch2('(.*?//([^/]+))', sLink, sUrlBase, sServ); // Получаем UrlBase и домен
-  sHeaders += 'Origin: '+sUrlBase+'\r\n'+
-              'X-Requested-With: XMLHttpRequest\r\n'+
-              ':authority: '+sServ+'\r\n';
-
-  JSON     = TJsonObject.Create();
-  OPTIONS  = TJsonObject.Create();
-  try {
-
-    // Ищем значения параметров (this.options)
-    if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
-      if (HmsRegExMatch3("//.*?/(.*?)/(.*?)/[^?]+\\??(.*)", sLink, sVer, sVal, sData))
-        sHtml = HmsDownloadURL("http://api.lostcut.net/?action=moonhtml&t="+sVer+"&i="+sVal+"&p="+HmsHttpEncode(sData), 'Referer: '+sHeaders);
-      if (!HmsRegExMatch('VideoBalancer\\((.*?)\\);', sHtml, sData)) {
-        sVal = "Не найдены данные VideoBalancer в iframe.";
-        if (HmsRegExMatch("<div[^>]+absolute.*?</div>", sHtml, sVal, 0, PCRE_SINGLELINE)) sVal = HmsRemoveLineBreaks(HmsHtmlToText(sVal, 65001));
-        HmsLogMessage(2, mpTitle+": "+sVal);
-        // Заглушка
-        sVal  = ExtractWord(Round(Random*2)+1, "wZ5JJ1CRWdO0,IRcEgNmu9AUn,ebxWWiOq6VbO", ",");
-        sData = HmsDownloadURL("https://studio.stupeflix.com/v/"+sVal+"/", sHeaders, true);
-        HmsRegExMatch('"(http[^>"]+\\.mp4)', sData, MediaResourceLink);
-        return;
-      }
-    }
-
-    OPTIONS.LoadFromString(sData);
-
-    // Если есть субтитры и их ещё локально не сохраняли - загружаем
-    if ((OPTIONS.S["subtitles\\master_vtt"]!="") && (!FileExists(PodcastItem[mpiSubtitleLanguage]))) {
-      sData = HmsUtf8Decode(HmsDownloadURL(OPTIONS.S["subtitles\\master_vtt"], "Referer: "+sHeaders));
-      RE = TRegExpr.Create('(\\d{2}:\\d{2}:[\\d:,.\\s->]+.*?)(?=\n\\d{2}:d{2}:|\n\\d+\n|$)', PCRE_SINGLELINE);
-      i = 1; sVal = ""; // Форматируем
-      if (RE.Search(sData)) do { sVal += Format("%d\r\n%s\r\n\r\n", [i, RE.Match]); i++; } while (RE.SearchAgain);
-      sLink = HmsSubtitlesDirectory+'\\'+PodcastItem.ItemID+'.srt';
-      HmsStringToFile(sVal, sLink);             // Сохраняем субтитры локально
-      PodcastItem[mpiSubtitleLanguage] = sLink; // Указываем новое расположение
-    }
-
-    // Получение ссылки на js-скрипт, где есть список параметров POST запроса
-    if (!HmsRegExMatch('src="([^"]+/video-[^"]+.js)', sHtml, sVal)) {
-      HmsLogMessage(2, mpTitle+": Не найдена ссылка на js-скрипт в iframe.");
-      return;
-    }
-    sLinks = HmsExpandLink(sVal, sUrlBase);
-    sJsData = HmsDownloadURL(sLinks, 'Referer: '+sHeaders);
-    // Получаем параметры POST запроса
-    if (!HmsRegExMatch('getVideoManifests.*?(\\{.*?\\})', sJsData, sData)) {
-      HmsLogMessage(2, mpTitle+": Не найдена функция getVideoManifests в скрипте плеера moonwalk.");
-      return;
-    }
-    if (!HmsRegExMatch('\\D=(\\{.*?\\})', sData, sJSONParams)) {
-      HmsLogMessage(2, mpTitle+": Не найдены параметры для POST запроса в функции getVideoManifests.");
-      return;
-    }
-
-    // Получаем данные для шифрования
-    string sKey='a0a47c3d5a46cf93102598bc2aac2909ce41c3344a74c76af21d4c63e9e0d4e4';
-    string iv  ='14661ce716c5ac9d60f1c366c7afd866';
-    
-    string sData4Encrypt = '{"a":'+OPTIONS.S['partner_id']+',"b":'+OPTIONS.S['domain_id']+',"c":false,"e":"'+OPTIONS.S['video_token']+'","f":"'+sUserAgent+'"}';
-    int padding = 16 - (Length(sData4Encrypt) % 16);
-    for (i=0; i < padding; i++) sData4Encrypt += chr(padding); // PKCS7 Padding
-    sVal  = HmsCryptCipherEncode("Rijndael", sData4Encrypt, HmsHexToString(sKey), HmsHexToString(iv), cmCBCx, "MIME64");
-    sPost = "q="+HmsHttpEncode(sVal);
-    sData = HmsSendRequest(sServ, "/vs", 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
-    if (sData=="") {
-      // Данные защиты устарели, пробуем получить новые
-      sData = HmsDownloadURL("https://github.com/WendyH/PHP-Scripts/raw/master/moon4crack.ini");
-      HmsRegExMatch('iv\\s*=\\s*["\']?(.*?)["\']' , sData, iv, );
-      HmsRegExMatch('key\\s*=\\s*["\']?(.*?)["\']', sData, sKey);
-
-      sData4Encrypt = '{"a":'+OPTIONS.S['partner_id']+',"b":'+OPTIONS.S['domain_id']+',"c":false,"e":"'+OPTIONS.S['video_token']+'","f":"'+sUserAgent+'"}';
-      padding = 16 - (Length(sData4Encrypt) % 16);
-      for (i=0; i < padding; i++) sData4Encrypt += chr(padding); // PKCS7 Padding
-        sVal  = HmsCryptCipherEncode("Rijndael", sData4Encrypt, HmsHexToString(sKey), HmsHexToString(iv), cmCBCx, "MIME64");
-      sPost = "q="+HmsHttpEncode(sVal);
-      sData = HmsSendRequest(sServ, "/vs", 'POST', 'application/x-www-form-urlencoded; Charset=UTF-8', sHeaders, sPost, 80, true);
-    }
-
-    sVar  = "";
-    JSON.LoadFromString(sData);
-    bool bMP4 = Pos("--mp4", mpPodcastParameters)>0;
-    if (bMP4 && (JSON.B["mp4" ])) sVar = "mp4" ;
-    else if     (JSON.B["m3u8"])  sVar = "m3u8";
-    sLink = JSON.S[sVar];
-    if (sLink!="") sData = HmsDownloadURL(sLink, "Referer: "+sHeaders, true);
-
-  } finally { JSON.Free; OPTIONS.Free; }
-
-  TStringList QLIST = TStringList.Create();
-
-  if (sVar=="m3u8") {
-    MediaResourceLink = sLink;
-    // Получение длительности видео, если она не установлена
-    // ------------------------------------------------------------------------
-    sVal = Trim(PodcastItem.ItemOrigin[mpiTimeLength]);
-    if ((sVal=='') || (RightCopy(sVal, 6)=='00.000')) {
-      if (HmsRegExMatch('(http.*?)[\r\n$]', sData, sLink)) {
-        sHtml = HmsDownloadUrl(sLink, 'Referer: '+sHeaders, true);
-        RE = TRegExpr.Create('#EXTINF:(\\d+.\\d+)', PCRE_SINGLELINE); f=0;
-        if (RE.Search(sHtml)) do f += StrToFloatDef(RE.Match(1), 0); while (RE.SearchAgain());
-        RE.Free;
-        if (f > 0) PodcastItem.ItemOrigin[mpiTimeLength] = HmsTimeFormat(Round(f))+'.000';
-      }
-    }
-    // ------------------------------------------------------------------------
-
-    // Если установлен ключ --quality или в настройках подкаста выставлен приоритет выбора качества
-    // ------------------------------------------------------------------------
-    string sSelectedQual = '', sMsg, sHeight; int iMinPriority = 99, iPriority;
-    if ((sQual!='') || (mpPodcastMediaFormats!='')) {
-      // Собираем список ссылок разного качества
-      RE = TRegExpr.Create('#EXT-X-STREAM-INF:RESOLUTION=\\d+x(\\d+).*?[\r\n](http.+)$', PCRE_MULTILINE);
-      if (RE.Search(sData)) do {
-        sHeight = Format('%.5d', [StrToInt(RE.Match(1))]);
-        sLink   = RE.Match(2);
-        QLIST.Values[sHeight] = sLink;
-        iPriority = HmsMediaFormatPriority(StrToInt(sHeight), mpPodcastMediaFormats);
-        if ((iPriority >= 0) && (iPriority < iMinPriority)) {
-          iMinPriority  = iPriority;
-          sSelectedQual = sHeight;
-        }
-      } while (RE.SearchAgain());
-      RE.Free;
-    }
-    // ------------------------------------------------------------------------
-
-  } else if (sVar=="mp4") {
-    // Составляем список ссылок с разным качеством
-    JSON = TJsonObject.Create();
-    try {
-      JSON.LoadFromString(sData);
-      for (i=0; i<JSON.Count; i++) {
-        sVer    = JSON.Names[i];
-        sLink   = JSON.S[sVer];
-        sHeight = Format('%.5d', [StrToIntDef(sVer, 0)]);
-        QLIST.Values[sHeight] = sLink;
-      }
-    } finally { JSON.Free(); }
-
-  } else {
-    HmsLogMessage(2, mpTitle+': Ошибка получения данных от сервера moonwalk.');
-    if (DEBUG==1) {
-      if (ServiceMode) sVal = SpecialFolderPath(0x37); // Общая папака "Видео"
-        else           sVal = SpecialFolderPath(0);    // Рабочий стол
-        sVal = IncludeTrailingBackslash(sVal)+'Moonwalk.log';
-      HmsStringToFile(sHeaders+'\r\nsHtml:\r\n'+sHtml+'\r\nsPost:\r\n'+sPost+'\r\nsData:\r\n'+sData, sVal);
-      HmsLogMessage(1, mpTitle+': Создан лог файл '+sVal);
-    }
-  }
-  // Если сформирован список ссылок для разного качества
-  if (QLIST.Count > 0) {
-    QLIST.Sort();
-    if      (sQual=='low'   ) sSelectedQual = QLIST.Names[0];
-    else if (sQual=='medium') sSelectedQual = QLIST.Names[Round((QLIST.Count-1) / 2)];
-    else if (sQual=='high'  ) sSelectedQual = QLIST.Names[QLIST.Count - 1];
-    else if (HmsRegExMatch('(\\d+)', sQual, sQual)) {
-      extended minDiff = 999999; // search nearest quality
-      for (i=0; i < QLIST.Count; i++) {
-        extended diff = StrToInt(QLIST.Names[i]) - StrToInt(sQual);
-        if (Abs(diff) < minDiff) {
-          minDiff = Abs(diff);
-          sSelectedQual = QLIST.Names[i];
-        }
-      }
-    }
-  }
-  if (sSelectedQual != '') MediaResourceLink = QLIST.Values[sSelectedQual];
-  if (bQualLog) {
-    sMsg = 'Доступное качество: ';
-    for (i = 0; i < QLIST.Count; i++) {
-      if (i>0) sMsg += ', ';
-      sMsg += IntToStr(StrToInt(QLIST.Names[i])); // Обрезаем лидирующие нули
-    }
-    if (sSelectedQual != '') sSelectedQual = IntToStr(StrToInt(sSelectedQual));
-    else sSelectedQual = 'Auto';
-    sMsg += '. Выбрано: ' + sSelectedQual;
-    HmsLogMessage(1, mpTitle+'. '+sMsg);
-  }
-  QLIST.Free;
-  if (sVar=="m3u8") MediaResourceLink = " "+Trim(MediaResourceLink);
-} // Конец функции поулчения ссылки с moonwalk.cc
-
-///////////////////////////////////////////////////////////////////////////////
-// Формирование ссылки для воспроизведения через HDSDump.exe
-void HDSLink(string sLink, string sQual = '') {
-  string sData, sExePath, sVal;
-  sExePath = ProgramPath+'\\Transcoders\\hdsdump.exe';
-  MediaResourceLink = Format('cmd://"%s" --manifest "%s" --outfile "<OUTPUT FILE>"', [sExePath, sLink]);
-  if (sQual       != '') MediaResourceLink += ' --quality ' + sQual;
-  if (mpTimeStart != '') MediaResourceLink += ' --skip '    + mpTimeStart;
-  PodcastItem[mpiTimeSeekDisabled] = true;
-  // Получение длительности видео, если она не установлена
-  if ((Trim(PodcastItem[mpiTimeLength])=='') || (RightCopy(PodcastItem[mpiTimeLength], 6)=='00.000')) {
-    sData = HmsDownloadUrl(sLink, 'Referer: '+sLink, true);
-    if (HmsRegExMatch('<duration>(\\d+)', sData, sVal))
-      PodcastItem.Properties[mpiTimeLength] = StrToInt(sVal);
-  }
-}
-
-
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки на Youtube
 bool GetLink_Youtube31(string sLink) {
@@ -341,9 +31,9 @@ bool GetLink_Youtube31(string sLink) {
   sSubtitlesUrl, sFile, sVal, sMsg, sConfig, sHeaders, ttsDef; 
   TJsonObject JSON; TRegExpr RegEx;
   
-  sHeaders = 'Referer: '+sLink+#13#10+
-             'User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36'+#13#10+
-             'Origin: http://www.youtube.com'+#13#10;
+  sHeaders = 'Referer: '+sLink+'\r\n'+
+             'User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36\r\n'+
+             'Origin: https://www.youtube.com\r\n';
   
   HmsRegExMatch('--maxheight=(\\d+)'    , mpPodcastParameters, sMaxHeight);
   HmsRegExMatch('--sublanguage=(\\w{2})', mpPodcastParameters, sSubtitlesLanguage);
@@ -357,18 +47,20 @@ bool GetLink_Youtube31(string sLink) {
   
   if (sVideoID=='') return VideoMessage('Невозможно получить Video ID в ссылке Youtube');
   
-  sLink = 'http://www.youtube.com/watch?v='+sVideoID+'&hl=ru&persist_hl=1&has_verified=1';
+  sLink = 'https://www.youtube.com/watch?v='+sVideoID+'&hl=ru';
   
   sData = HmsDownloadURL(sLink, sHeaders, true);
   sData = HmsRemoveLineBreaks(sData);
+  bool isLive = HmsRegExMatch('"live_playback":"1"', sData, '');
+  
   // Если еще не установлена реальная длительность видео - устанавливаем
-  if ((Trim(mpTimeLength)=='') || (RightCopy(mpTimeLength, 6)=='00.000')) {
+  if ((Trim(mpTimeLength)=='') || (RightCopy(mpTimeLength, 6)=='00.000') && !isLive) {
     if (HmsRegExMatch2('itemprop="duration"[^>]+content="..(\\d+)M(\\d+)S', sData, sVal, sMsg)) {
-      PodcastItem[mpiTimeLength] = StrToInt(sVal)*60+StrToInt(sMsg);
+      PodcastItem[mpiTimeLength] = HmsTimeFormat(StrToInt(sVal)*60+StrToInt(sMsg));
     } else {
       sVal = HmsDownloadURL('http://www.youtube.com/get_video_info?html5=1&c=WEB&cver=html5&cplayer=UNIPLAYER&hl=ru&video_id='+sVideoID, sHeaders, true);
       if (HmsRegExMatch('length_seconds=(\\d+)', sData, sMsg))
-        PodcastItem[mpiTimeLength] = StrToInt(sMsg);
+        PodcastItem[mpiTimeLength] = HmsTimeFormat(StrToInt(sMsg));
     }
   }
   if (!HmsRegExMatch('player.config\\s*?=\\s*?({.*?});', sData, sConfig)) {
@@ -399,6 +91,14 @@ bool GetLink_Youtube31(string sLink) {
   try {
     JSON.LoadFromString(sConfig);
     hlsUrl      = HmsExpandLink(JSON.S['args\\hlsvp' ], UrlBase);
+    if ((hlsUrl=='') && JSON.B['args\\player_response']) {
+      TJsonObject JSON2 = TJsonObject.Create();
+      try {
+        JSON2.LoadFromString(JSON.S['args\\player_response']);
+        hlsUrl = JSON2.S['streamingData\\hlsManifestUrl'];
+      } finally { JSON2.Free; }
+      
+    }
     ttsUrl      = HmsExpandLink(JSON.S['args\\caption_tracks'], UrlBase);
     flp         = HmsExpandLink(JSON.S['url'         ], UrlBase);
     jsUrl       = HmsExpandLink(JSON.S['assets\\js'  ], UrlBase);
@@ -413,14 +113,10 @@ bool GetLink_Youtube31(string sLink) {
       return;
     }
   } finally { JSON.Free; }
-  if (Copy(jsUrl, 1, 2)=='//') jsUrl = 'http:'+Trim(jsUrl);
-  HmsRegExMatch('/player-([\\w_-]+)/', jsUrl, playerId);
-  algorithm = HmsDownloadURL('https://hms.lostcut.net/youtube/getalgo.php?jsurl='+HmsHttpEncode(jsUrl));
   
   if (hlsUrl!='') {
     MediaResourceLink = ' '+hlsUrl;
-    
-    sData = HmsDownloadUrl(sLink, sHeaders, true);
+    sData = HmsDownloadUrl(hlsUrl, sHeaders, true);
     RegEx = TRegExpr.Create('BANDWIDTH=(\\d+).*?RESOLUTION=(\\d+)x(\\d+).*?(http[^#]*)', PCRE_SINGLELINE);
     try {
       if (RegEx.Search(sData)) do {
@@ -438,6 +134,9 @@ bool GetLink_Youtube31(string sLink) {
     } finally { RegEx.Free(); }
     
   } else if (streamMap!='') {
+    if (Copy(jsUrl, 1, 2)=='//') jsUrl = 'http:'+Trim(jsUrl);
+    HmsRegExMatch('/player-([\\w_-]+)/', jsUrl, playerId);
+    algorithm = HmsDownloadURL('https://hms.lostcut.net/youtube/getalgo.php?jsurl='+HmsHttpEncode(jsUrl));
     i=1; while (i<=Length(streamMap)) {
       sData = Trim(ExtractStr(streamMap, ',', i));
       sType = HmsHttpDecode(ExtractParam(sData, 'type', '', '&'));
@@ -447,9 +146,14 @@ bool GetLink_Youtube31(string sLink) {
       if (Pos('url=', sData)>0) {
         sLink = ' ' + HmsHttpDecode(ExtractParam(sData, 'url', '', '&'));
         if (Pos('&signature=', sLink)==0) {
-          sig = HmsHttpDecode(ExtractParam(sData, 'sig', '', '&'));    
+          bool bOldSignature = true;
+          sig = HmsHttpDecode(ExtractParam(sData, 'sig', '', '&'));
           if (sig=='') {
-            sig = HmsHttpDecode(ExtractParam(sData, 's', '', '&'));
+            HmsRegExMatch('\[\\A|&|"]s=([^&,"]+)', sData, sig);
+            sig = HmsHttpDecode(sig);
+            bOldSignature = false;
+          }
+          if (sig!='') {
             for (w=1; w<=WordCount(algorithm, ' '); w++) {
               alg = ExtractWord(w, algorithm, ' ');
               if (Length(alg)<1) continue;
@@ -459,23 +163,26 @@ bool GetLink_Youtube31(string sLink) {
               if (alg[1]=='w') {n = (num-Trunc(num/Length(sig)))+1; Swap(sig[1], sig[n]);} // Swap
             }
           }
-          if (sig!='') sLink += '&signature=' + sig;
+          if (sig!='') {
+            if (bOldSignature) sLink += '&signature=' + sig;
+            else               sLink += '&sig='       + sig;
+          }
         }
       }
-      if (itag in ([139,140,141,171,172])) { sAudio = sLink; continue; }
+      if (itag in ([139,140,141,171,172,249,250,251])) { sAudio = sLink; continue; }
       if (sLink!='') {
-        height = 0; //http://www.genyoutube.net/formats-resolution-youtube-videos.html
-        if      (itag in ([13,17,160                  ])) height = 144;
-        else if (itag in ([5,36,92,132,133,242        ])) height = 240;
-        else if (itag in ([6                          ])) height = 270;
-        else if (itag in ([18,34,43,82,100,93,134,243 ])) height = 360;
-        else if (itag in ([35,44,83,101,94,135,244,43 ])) height = 480;
-        else if (itag in ([22,45,84,102,95,136,298,247])) height = 720;
-        else if (itag in ([37,46,85,96,137,248,299    ])) height = 1080;
-        else if (itag in ([264,271                    ])) height = 1440;
-        else if (itag in ([266,138                    ])) height = 2160;
-        else if (itag in ([272                        ])) height = 2304;
-        else if (itag in ([38                         ])) height = 3072;
+        height = 0; // https://gist.github.com/sidneys/7095afe4da4ae58694d128b1034e01e2
+        if      (itag in ([13,17,160,278                                            ])) height = 144;
+        else if (itag in ([5,36,92,132,133,242,331                                  ])) height = 240;
+        else if (itag in ([6                                                        ])) height = 270;
+        else if (itag in ([18,34,43,82,100,93,134,167,243,332                       ])) height = 360;
+        else if (itag in ([35,44,59,78,83,101,94,135,212,168,218,219,244,245,246,333])) height = 480;
+        else if (itag in ([22,45,84,102,95,136,298,169,247,302,334                  ])) height = 720;
+        else if (itag in ([37,46,85,96,137,170,248,299,303,335                      ])) height = 1080;
+        else if (itag in ([264,271,308,336                                          ])) height = 1440;
+        else if (itag in ([266,313,315,138,337                                      ])) height = 2160;
+        else if (itag in ([38                                                       ])) height = 3072;
+        else if (itag in ([272                           ])) height = 4320;
         else continue;
         if (mpPodcastMediaFormats!='') {
           priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
@@ -491,8 +198,8 @@ bool GetLink_Youtube31(string sLink) {
         }
       }
     }
-    if (bAdaptive && (sAudio!='')) MediaResourceLink = '-i "'+Trim(MediaResourceLink)+'" -i "'+Trim(sAudio)+'"';
-    
+    sVal = ""; if (Trim(mpTimeStart)!="") sVal = " -ss "+mpTimeStart;
+    if (bAdaptive && (sAudio!='')) MediaResourceLink = '-hide_banner -reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 2 -fflags +genpts -i "'+Trim(MediaResourceLink)+'"'+sVal+' -i "'+Trim(sAudio)+'"';
   }
   // Если есть субтитры и в дополнительных параметрах указано их показывать - загружаем 
   if (bSubtitles && (ttsUrl!='')) {
@@ -557,7 +264,8 @@ THmsScriptMediaItem CreateMediaItem(THmsScriptMediaItem Folder, string sTitle, s
   Item[mpiCreateDate] = VarToStr(IncTime(gStart,0,-gnTotalItems,0,0));
   Item[mpiTimeLength] = HmsTimeFormat(nTime)+'.000';
   if (HmsRegExMatch('(?:/embed/|v=)([\\w-_]+)', sLink, sImg))
-    Item[mpiThumbnail ] = 'http://img.youtube.com/vi/'+sImg+'/0.jpg';
+    if (sImg!='movie')
+      Item[mpiThumbnail ] = 'http://img.youtube.com/vi/'+sImg+'/0.jpg';
   gnTotalItems++;
   return Item;
 }
@@ -669,8 +377,7 @@ bool VideoPreview() {
   for (n=0; n<INFO.Count; n++) sData += '&'+Trim(INFO.Names[n])+'='+HmsHttpEncode(INFO.Values[INFO.Names[n]]);
   INFO.Free(); // Освобождаем объект из памяти, теперь он нам не нужен
   // Делаем POST запрос не сервер формирования картинки с информацией
-  sLink = HmsSendRequestEx('wonky.lostcut.net', '/videopreview.php?p='+gsPreviewPrefix, 'POST', 
-  'application/x-www-form-urlencoded', '', sData, 80, 0, '', true);
+  sLink = HmsSendRequestEx('wonky.lostcut.net', '/videopreview.php?p='+gsPreviewPrefix, 'POST', 'application/x-www-form-urlencoded', '', sData, 80, 0, '', true);
   // В ответе должна быть ссылка на сформированную картинку
   if (LeftCopy(sLink, 4)!='http') {HmsLogMessage(2, 'Ошибка получения файла информации videopreview.'); return;}
   // Сохраняем сформированную картинку с информацией в файл на диске
@@ -717,83 +424,12 @@ void CreateTrailersLinks(string sLink) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Создание списка серий сериала с Moonwalk.cc
-void CreateMoonwallkLinks(string sLink, string sKPID='') {
-  string sData; TJsonObject PLAYLIST;
-  // Пытаемся получить ID кинопоиска
-  if (sKPID=='') {
-    sKPID = Trim(PodcastItem[mpiKPID]); // Получаем запомненный kinopoisk ID
-    if (sKPID=='') HmsRegExMatch('/images/(film|film_big)/(\\d+)', mpThumbnail, sKPID, 2);
-    if (sKPID=='') HmsRegExMatch('/iphone360_(\\d+)', mpThumbnail, sKPID);
-  }
-  
-  sData = HmsDownloadURL(gsAPIUrl+'series?url='+HmsHttpEncode(sLink)+'&kpid='+sKPID, "Accept-Encoding: gzip, deflate", true);
-  sData = HmsUtf8Decode(sData);
-  PLAYLIST = TJsonObject.Create();
-  try {
-    PLAYLIST.LoadFromString(sData);
-    CreateVideosFromJsonPlaylist(PLAYLIST.AsArray(), PodcastItem);
-  } finally { PLAYLIST.Free; }
-}
-
-
-///////////////////////////////////////////////////////////////////////////////
 // Конвертирование строки даты вида ГГГГ-ММ-ДД в дату
 TDateTime ConvertToDate(string sData) {
   string y, m, d, h, i, s;
   HmsRegExMatch3('(\\d+)-(\\d+)-(\\d+)', sData, y, m, d);
   HmsRegExMatch3('(\\d+):(\\d+):(\\d+)', sData, h, i, s);
   return StrToDateDef(d+'.'+m+'.'+y, Now);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Создание дерева ссылок из объекта Json
-void CreateVideosFromJsonPlaylist(TJsonArray JARRAY, THmsScriptMediaItem Folder) {
-  int i; string sName, sLink, sVal, sImg, sFmt; TJsonObject JOBJECT; THmsScriptMediaItem Item;
-  
-  if (JARRAY==nil) return;
-  for (i=0; i<JARRAY.Length; i++) {
-    sFmt = "%.2d %s"; if (JARRAY.Length > 99) sFmt = "%.3d %s";
-    JOBJECT = JARRAY[i];
-    if (JOBJECT.A["playlist"] != nil) {
-      if (JARRAY.Length==1) { // Если сезон один, сразу создаём серии без папки
-        CreateVideosFromJsonPlaylist(JOBJECT.A["playlist"], Folder);
-      } else {
-        sName = JOBJECT.S["comment"];
-        Item  = Folder.AddFolder(sName);
-        Item[mpiCreateDate] = VarToStr(IncTime(gStart,0,-gnTotalItems,0,0)); gnTotalItems++;
-        CreateVideosFromJsonPlaylist(JOBJECT.A["playlist"], Item);
-      }
-    } else {
-      sLink = JOBJECT.S["file"   ];
-      sName = JOBJECT.S["comment"];
-      sImg  = JOBJECT.S["image"  ]; if (sImg=='') sImg = mpThumbnail;
-      sLink = ReplaceStr(sLink, "moon.hdkinoteatr.com", "moonwalk.cc");
-
-      if (sName=='Фильм') sName = mpTitle;
-      if ((Pos('/serial/', sLink)>0) && (Pos('episode', sLink)<1))
-        CreateFolder(Folder, sName, sLink, sImg);
-      
-      else if (Pos('youtu', sLink) > 0) {
-        
-        if (Pos('Трейлер', sName)>0)
-          CreateMediaItem(Folder, sName, sLink, sImg, 230);
-        else
-          CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
-      } else {
-        // Форматируем номер в два знака
-        if (sName!=mpTitle) {
-          if (HmsRegExMatch("^(\\d+)", sName, sVal)) 
-            sName = ReplaceStr(sName, sVal, Trim(Format(sFmt, [StrToInt(sVal), ""])));
-          else
-            sName = Format(sFmt, [i+1, sName]);
-        }
-        Item = CreateMediaItem(Folder, sName, sLink, sImg, gnDefaultTime);
-        if (JOBJECT.B["subs"]) Item[mpiSubtitleLanguage] = HmsSubtitlesDirectory+'\\'+Item.ItemID+'.srt';
-        FillVideoInfo(Item);
-      }
-    }
-  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -855,42 +491,182 @@ void FillVideoInfo(THmsScriptMediaItem Item) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Нормализация имени серии
+string NormName(string sName) {
+  string sNum, sOther;
+  sName = ReplaceStr(ReplaceStr(HmsHtmlToText(sName), '\r', ''), '\n', ' ');
+  if (HmsRegExMatch2('^(\\d+)\\s*(.*)', sName, sNum, sOther)) {
+    sName = Format('%.2d %s', [StrToInt(sNum), sOther]);
+  }
+  return sName;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Создание ссылок на фильм или сериал
 void CreateLinks() {
-  string sData, sName, sLink, sVal; TJsonObject VIDEO, PLAYLIST; THmsScriptMediaItem Item;
-  VIDEO    = TJsonObject.Create();
+  string sHtml, sData, sName, sLink, sVal, sTrans, sQual, sAdd, sSeasonName, sGrp, sAPI, sImg, sHeaders; 
+  THmsScriptMediaItem Item; int i, n, nTime; TJsonObject VIDEO, PLAYLIST, VLINKS; TJsonArray SEASONS, EPISODES;
+  VIDEO    = TJsonObject.Create(); TRegExpr RE;
   PLAYLIST = TJsonObject.Create();
-  
-  bool bTrailers = Pos('--trailersfolder', mpPodcastParameters) > 0;
+  VLINKS   = TJsonObject.Create();
   
   try {
     VIDEO.LoadFromString(PodcastItem[mpiJsonInfo]);
     
-    gStart = ConvertToDate(VIDEO.S['date']); // Устанавливаем началную точку для даты ссылок
+    gStart = ConvertToDate(VIDEO.S['date']); // Устанавливаем начальную точку для даты ссылок
     gnDefaultTime = VIDEO.I['time'];
     sLink = VIDEO.S['link'];
     sName = VIDEO.S['name'];
-    sLink = ReplaceStr(sLink, "moon.hdkinoteatr.com", "moonwalk.cc");
     
-    if (HmsRegExMatch('(\\[|\\{)', sLink, '')) {
-      sLink = ReplaceStr(sLink, "episode=", "e="); // Если это ссылки на сериалы, то создавать папки
-      PLAYLIST.LoadFromString(sLink);
-      CreateVideosFromJsonPlaylist(PLAYLIST.AsArray(), PodcastItem);
-    } else {
-      
-      if (HmsRegExMatch('/serial/', sLink, '')) {
-        CreateMoonwallkLinks(sLink, VIDEO.S['kpid']); 
-      } else {
-        Item = CreateMediaItem(PodcastItem, sName, sLink, mpThumbnail, gnDefaultTime);
-        FillVideoInfo(Item);
+    try {
+      VLINKS.LoadFromString(sLink);
+      try {
+        if (VLINKS.B['videocdn']) {
+          sLink = VLINKS.S['videocdn\\iframe'];
+          sName = Trim('[videocdn] '+VLINKS.S['videocdn\\translate']+' '+VLINKS.S['videocdn\\quality']);
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL("https://hms.lostcut.net/proxy.php?"+sLink, 'Referer: '+mpFilePath));
+            HmsRegExMatch('id="files"\\s*value="(.*?)"', sHtml, sVal);
+            PLAYLIST.LoadFromString(HmsHtmlDecode(sVal));
+            SEASONS = PLAYLIST.A[PLAYLIST.Names[0]];
+            for (i=0; i<SEASONS.Length; i++) {
+              EPISODES = SEASONS[i].A['folder'];
+              if (EPISODES==nil) {
+                // Нет сезонов - есть только серии
+                EPISODES = SEASONS;
+                sSeasonName = '';
+              } else {
+                sSeasonName = NormName(SEASONS[i].S['comment']);
+                EPISODES = SEASONS[i].A['folder'];
+              }
+              for (n=0; n<EPISODES.Length; n++) {
+                sData = EPISODES[n].S['file'];
+                sName = NormName(EPISODES[n].S['comment']);
+                RE = TRegExpr.Create('\\[(.*?)\\]([^,\\s"\']+)');
+                if (RE.Search(sData)) do {
+                  sQual = RE.Match(1);
+                  sLink = 'http:'+RE.Match(2);
+                  sGrp  = 'Videocdn '+sQual+'\\'+sSeasonName;
+                  Item = CreateMediaItem(PodcastItem, sName, sLink, mpThumbnail, gnDefaultTime, sGrp);
+                } while (RE.SearchAgain());
+              }
+            }
+            
+          } else {
+            Item = CreateMediaItem(PodcastItem, sName, sLink, mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+        } // if (VLINKS.B['videocdn'])
+      } except { }
+      try {
+        if (VLINKS.B['collaps']) {
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL(VLINKS.S['collaps\\iframe'], 'Referer: '+mpFilePath));
+            HmsRegExMatch('apiBaseUrl:\\s*[\'"](.*?)[\'"]', sHtml, sAPI);
+            HmsRegExMatch('franchise:\\s*(\\d+)'          , sHtml, sVal);
+            sData = HmsDownloadURL(sAPI+'/season/by-franchise/?id='+sVal+'&host=zombie-film.com-embed');
+            PLAYLIST.LoadFromString(sData);
+            SEASONS = PLAYLIST.AsArray;
+            for (i=0; i<SEASONS.Length; i++) {
+              sVal = SEASONS[i].S['id'];
+              sSeasonName = SEASONS[i].S['season']+' сезон';
+              sData = HmsDownloadURL(sAPI+'/video/by-season/?id='+sVal+'&host=zombie-film.com-embed');
+              PLAYLIST.LoadFromString(sData);
+              EPISODES = PLAYLIST.AsArray;
+              for (n=0; n<EPISODES.Length; n++) {
+                sImg  = EPISODES[n].S['poster\\small'];
+                nTime = EPISODES[n].I['duration'];
+                sVal  = EPISODES[n].S['episodeName']; if (sVal=='') sVal = 'серия';
+                sName = Format('%.2d %s', [EPISODES[n].I['episode'], sVal]);
+                PLAYLIST = EPISODES[n].O['urlQuality'];
+                for (int q=0; q<PLAYLIST.Count; q++) {
+                  sQual = PLAYLIST.Names[q];
+                  sLink = PLAYLIST.S[sQual];
+                  sGrp = 'Collaps '+sQual+'\\'+sSeasonName;
+                  Item = CreateMediaItem(PodcastItem, sName, sLink, sImg, nTime, sGrp);
+                }
+              }
+            }
+          } else {
+            Item = CreateMediaItem(PodcastItem, '[collaps] '+VIDEO.S['name'], VLINKS.S['collaps\\iframe'], mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+          
+        } // if (VLINKS.B['collaps'])
+      } except { }
+      try {
+        if (VLINKS.B['iframe']) {
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL(VLINKS.S['iframe\\iframe'], 'Referer: '+mpFilePath));
+            //HmsRegExMatch('background:\\s*url\\((https.*?)\\)', sHtml, sImg);
+            RE = TRegExpr.Create('<a[^>]+href=[\'"](.*?)[\'"][^>]*>Сезон\\s*\\d+</a>', PCRE_CASELESS);
+            if (RE.Search(sHtml)) do {
+              sSeasonName = NormName(RE.Match(0));
+              if (Pos(RE.Match, VLINKS.S['iframe\\iframe'])>0) 
+                sData = sHtml;
+              else 
+                sData = HmsUtf8Decode(HmsDownloadURL('https://videoframe.at'+RE.Match, 'Referer: '+mpFilePath));
+              TRegExpr RESeries = TRegExpr.Create('<a[^>]+href=[\'"](.*?)[\'"][^>]*>\\d+\\s*серия</a>', PCRE_CASELESS);
+              if (RESeries.Search(sData)) do {
+                sLink = 'https://videoframe.at'+RESeries.Match(1);
+                sName = NormName(RESeries.Match(0));
+                sGrp  = 'iframe\\'+sSeasonName;
+                Item = CreateMediaItem(PodcastItem, sName, sLink, sImg, gnDefaultTime, sGrp);
+              } while (RESeries.SearchAgain());
+            } while (RE.SearchAgain());
+          } else {
+            Item = CreateMediaItem(PodcastItem, '[iframe] '+VIDEO.S['name'], VLINKS.S['iframe\\iframe'], mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+          
+        } // if (VLINKS.B['iframe'])
+      } except { }
+      try {
+        if (VLINKS.B['hdvb']) {
+          if (VIDEO.B['isserial']) {
+            string sSeriesData, sOriginalLink;
+            sOriginalLink = VLINKS.S['hdvb\\iframe'];
+            sHtml = HmsUtf8Decode(HmsDownloadURL(sOriginalLink, 'Referer: '+mpFilePath, true));
+            HmsRegExMatch('name="translation"><option value="([^"]+)" selected', sHtml, sTrans);
+            // Есть зесозы? Если нет - деалем так, чтобы нашёлся один, текущий
+            if (!HmsRegExMatch('(<select[^>]+id="seasons".*?</select>)', sHtml, sData)) {
+              sData = "<option value="" selected></option>"; 
+            }
+            RE = TRegExpr.Create('<option[^>]+value="(.*?)".*?</option>', PCRE_SINGLELINE);
+            try {
+              if (RE.Search(sData)) do {
+                mpSeriesSeasonNo = RE.Match;
+                if (Pos('selected', RE.Match(0))>0)
+                  sSeriesData = sHtml;
+                else
+                  sSeriesData = HmsUtf8Decode(HmsDownloadURL(sOriginalLink+'?s='+mpSeriesSeasonNo+'&t='+sTrans, 'Referer: '+mpFilePath, true));
+                HmsRegExMatch('(<select[^>]+id="episodes".*?</select>)', sSeriesData, sSeriesData);
+                RESeries = TRegExpr.Create('<option[^>]+value="(\\d+)".*?</option>', PCRE_SINGLELINE);
+                if (RESeries.Search(sSeriesData)) do {
+                  sLink = VLINKS.S['hdvb\\iframe']+'?e='+RESeries.Match+'&s='+mpSeriesSeasonNo+'&t='+sTrans;
+                  sName = NormName(RESeries.Match(0));
+                  sGrp  = 'hdvb '+VLINKS.S['hdvb\\translate']+'\\Сезон '+mpSeriesSeasonNo;
+                  Item = CreateMediaItem(PodcastItem, sName, sLink, mpThumbnail, gnDefaultTime, sGrp);
+                } while (RESeries.SearchAgain());
+              } while (RE.SearchAgain());
+            } finally { RE.Free; RESeries.Free; }
+          } else {
+            sName = '[hdvb] '+VLINKS.S['hdvb\\translate']+' '+VLINKS.S['hdvb\\quality'];
+            Item  = CreateMediaItem(PodcastItem, sName, VLINKS.S['hdvb\\iframe'], mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+          
+        } // if (VLINKS.B['hdvb'])
+      } except { }
+      if (VLINKS.B['trailer']) {
+        sLink = VLINKS.S['trailer\\iframe'];
+        Item = CreateMediaItem(PodcastItem, 'Трейлер', sLink, mpThumbnail, gnDefaultTime);
+        if (HmsRegExMatch('/embed/([^/]+)', sLink, sVal))
+          Item[mpiThumbnail] = 'http://img.youtube.com/vi/'+sVal+'/0.jpg';
+        Item[mpiTimeLength] = '00:03:30';
       }
-
-    }
-
-    // Создание папки "Трейлеры"
-    if (bTrailers && VIDEO.B['kpid'] && (Pos('Трейлер', sLink) < 1))
-      CreateFolder(PodcastItem, 'Трейлеры', 'http://www.kinopoisk.ru/film/'+VIDEO.S['kpid']+'/video/');
-      
+    } except { HmsLogMessage(1, "В ссылках на фильм содержаться плохие данные. Кина не будет. "+sLink); }
+    
     // Специальная папка добавления/удаления в избранное
     if (VIDEO.B['isserial'] && (Pos('--controlfavorites', mpPodcastParameters)>0)) {
       // Проверка, находится ли сериал в избранном?
@@ -914,49 +690,109 @@ void CreateLinks() {
       CreateInfoItem('Перевод' , VIDEO.S["translation"]);
     }
     
-  } finally { VIDEO.Free; PLAYLIST.Free; }
+  } finally { VIDEO.Free; PLAYLIST.Free; VLINKS.Free; }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Создание ссылок на фильм или сериал
-void SearchAndPlayVideoByKPid() {
-  string sData, sID;
+// Получение ссылки с ресурса tvmovies
+void GetLink_tvmovies(string sLink) {
+  string html, data, sHeight, sQual, sSelectedQual; int i, iPriority, iMinPriority=99;
+  html = HmsUtf8Decode(HmsDownloadURL('https://hms.lostcut.net/proxy.php?'+sLink));
+  HmsRegExMatch('id="files"\\s*value=[\'"](.*?)[\'"]', html, data);
+  data = HmsJsonDecode(HmsHtmlToText(data));
+    
+  TStringList QLIST = TStringList.Create();
+  TRegExpr RE = TRegExpr.Create('\\[(\\d+).*?\\]([^,\\s"\']+)');
+  if (RE.Search(data)) do {
+    sQual = RE.Match(1);
+    sLink = 'http:'+RE.Match(2);
+    sHeight = Format('%.5d', [StrToInt(sQual)]);
+    QLIST.Values[sHeight] = sLink;
+    MediaResourceLink = " "+sLink; // по-умолчанию
+    // Если установлен ключ --quality или в настройках подкаста выставлен приоритет выбора качества
+    // ------------------------------------------------------------------------
+    iPriority = HmsMediaFormatPriority(StrToInt(sHeight), mpPodcastMediaFormats);
+    if ((iPriority >= 0) && (iPriority < iMinPriority)) {
+      iMinPriority  = iPriority;
+      sSelectedQual = sHeight;
+    }
+  } while (RE.SearchAgain());
+  HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
+  QLIST.Sort();
+  if (QLIST.Count > 0) {
+    if      (sQual=='low'   ) sSelectedQual = QLIST.Names[0];
+    else if (sQual=='medium') sSelectedQual = QLIST.Names[Round((QLIST.Count-1) / 2)];
+    else if (sQual=='high'  ) sSelectedQual = QLIST.Names[QLIST.Count - 1];
+    else if (HmsRegExMatch('(\\d+)', sQual, sQual)) {
+      extended minDiff = 999999; // search nearest quality
+      for (i=0; i < QLIST.Count; i++) {
+        extended diff = StrToInt(QLIST.Names[i]) - StrToInt(sQual);
+        if (Abs(diff) < minDiff) {
+          minDiff = Abs(diff);
+          sSelectedQual = QLIST.Names[i];
+        }
+      }
+    }
+  }
+  if (sSelectedQual!='') MediaResourceLink = ' '+QLIST.Values[sSelectedQual];
+
+  bool bQualLog = Pos('--qualitylog', mpPodcastParameters) > 0;
+  if (bQualLog) {
+    string sMsg = 'Доступное качество: ';
+    for (i = 0; i < QLIST.Count; i++) {
+      if (i>0) sMsg += ', ';
+      sMsg += IntToStr(StrToInt(QLIST.Names[i])); // Обрезаем лидирующие нули
+    }
+    if (sSelectedQual != '') sSelectedQual = IntToStr(StrToInt(sSelectedQual));
+    else sSelectedQual = 'Auto';
+    sMsg += '. Выбрано: ' + sSelectedQual;
+    HmsLogMessage(1, mpTitle+'. '+sMsg);
+  }
   
-  if (Trim(PodcastItem[mpiJsonInfo])!='') return;
-  
-  if (!HmsRegExMatch('kpid=(\\d+)', mpFilePath, sID)) return;
-  sData = HmsDownloadURL(gsAPIUrl+'videos?kpid='+sID, "Accept-Encoding: gzip, deflate", true);
-  HmsRegExMatch('^\\[(.*)\\]', sData, sData, 1, PCRE_SINGLELINE);
-  PodcastItem[mpiJsonInfo] = HmsUtf8Decode(sData);
+  QLIST.Free; RE.Free;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Получение ссылки с ресурса buildplayer
+void GetLink_HLS(string sLink) {
+  string html = HmsDownloadURL(sLink, 'Referer: '+mpFilePath);
+  HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
+  HmsRegExMatch('"hls":"(.*?)"'          , html, MediaResourceLink); // Второй вариант
+  MediaResourceLink = HmsJsonDecode(MediaResourceLink);
+  if (LeftCopy(MediaResourceLink, 1)=='/') MediaResourceLink = HmsExpandLink(MediaResourceLink, 'http:');
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Получение ссылки с ресурса videoframe
+void GetLink_videoframe(string sLink) {
+  string html, data, post, token, type, name, headers, ret, id, season, episode;
+  headers = "https://videoframe.at/\r\n"+
+            "X-REF: hdkinoteatr.com\r\n"+
+            "Origin: https://videoframe.at\r\n";
+  html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
+  HmsRegExMatch('data-token=[\'"](.*?)[\'"]', html, token);
+  HmsRegExMatch('data-type=[\'"](.*?)[\'"]' , html, type );
+  HmsRegExMatch('season\\s*=\\s*[\'"](\\d+)[\'"]' , html, season );
+  HmsRegExMatch('episode\\s*=\\s*[\'"](\\d+)[\'"]', html, episode);
+  post = 'token='+token+'&type='+type+'&season='+season+'&episode='+episode;
+  data = HmsSendRequestEx('videoframe.at', '/loadvideo', 'POST', 'application/x-www-form-urlencoded', headers, post, 443, 16, ret, true);
+  TJsonObject JSON = TJsonObject.Create();
+  JSON.LoadFromString(data);
+  MediaResourceLink = JSON.S['src'];
+  JSON.Free;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка ссылки на известные нам ресурсы видео и получение ссылки на поток
 void GetLink() {
-  mpFilePath = ReplaceStr(mpFilePath, "moon.hdkinoteatr.com", "moonwalk.cc");
-  if (HmsRegExMatch('(vk.com|vkontakte.ru)', mpFilePath, '')) {
-    GetLink_VK(mpFilePath);
-
-  } else if (HmsRegExMatch('(54.228.189.108|moonwalk.cc)', mpFilePath, '')) {
-    GetLink_Moonwalk(mpFilePath);
-
-  } else if (HmsRegExMatch('/(serial|video)/(.*?)/iframe', mpFilePath, '')) {
-    GetLink_Moonwalk(mpFilePath);
-
-  } else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) {
-    GetLink_YouTube31(mpFilePath);
-
-  } else if (HmsFileMediaType(mpFilePath)==mtVideo) {
-    MediaResourceLink = mpFilePath;
-
-  } else if (LeftCopy(mpFilePath, 4)=='Info') {
-    VideoPreview();
-  
-  } else if (LeftCopy(mpFilePath, 4)=='kpid') {
-    SearchAndPlayVideoByKPid();
-    
-  } else if (LeftCopy(mpFilePath, 4)=='-Fav') 
-    AddRemoveFavorites();
+  if      (Pos('videoframe.at', mpFilePath)>0) GetLink_Videoframe (mpFilePath);
+  else if (Pos('tvmovies.in'  , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
+  else if (Pos('buildplayer'  , mpFilePath)>0) GetLink_HLS        (mpFilePath);
+  else if (Pos('farsihd'      , mpFilePath)>0) GetLink_HLS        (mpFilePath);
+  else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube31(mpFilePath);
+  else if (HmsFileMediaType(mpFilePath)==mtVideo) MediaResourceLink = mpFilePath;
+  else if (LeftCopy(mpFilePath, 4)=='Info') VideoPreview();
+  else if (LeftCopy(mpFilePath, 4)=='-Fav') AddRemoveFavorites();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1005,23 +841,18 @@ void MarkViewed() {
 
 ///////////////////////////////////////////////////////////////////////////////
 //                     Г Л А В Н А Я   П Р О Ц Е Д У Р А                     //
+///////////////////////////////////////////////////////////////////////////////
 {
   if (PodcastItem.IsFolder) {
     // Зашли в папку подкаста - создаём ссылки внутри неё
     if (HmsRegExMatch('kinopoisk.ru/film/\\d+/video', mpFilePath, ''))
       CreateTrailersLinks(mpFilePath);  // Это папка "Трейлеры"
-    else if (HmsRegExMatch('/serial/', mpFilePath, ''))
-      CreateMoonwallkLinks(mpFilePath); // Зашли в вариант перевода сериала
     else
       CreateLinks();
   
   } else { 
     // Запустили фильм - получаем ссылку на медиа-поток
     GetLink();  
-    if ((Trim(MediaResourceLink)=='') && HmsRegExMatch('"link":.*?(http[^"\']+)', PodcastItem[mpiJsonInfo], mpFilePath)) {
-      mpFilePath = HmsJsonDecode(mpFilePath);
-      GetLink();  
-    }
     
     if ((Trim(MediaResourceLink)!='') && (Pos('--markonplay', mpPodcastParameters)>0)) 
       MarkViewed();
