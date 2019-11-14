@@ -518,6 +518,7 @@ void CheckPodcastUpdate() {
       else continue;                         // Если файл не определён - пропускаем
       if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
+        sData = ReplaceStr(sData, 'п»ї', ''); // Remove BOM
         if (sData=='') continue;                                                     // Если не получилось загрузить, пропускаем
         Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
         Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
