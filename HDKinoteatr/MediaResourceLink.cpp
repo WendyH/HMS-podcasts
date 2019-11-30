@@ -941,7 +941,7 @@ void GetLink_Kodik(string sLink) {
       HmsRegExMatch('^(.*?\\.mp4):hls:manifest.m3u8', sLink, sLink);
       sHeight = Format('%.5d', [StrToInt(sName)]);
       QLIST.Values[sHeight] = sLink;
-      MediaResourceLink = " "+sLink; // по-умолчанию
+      MediaResourceLink = sLink; // по-умолчанию
       // Если установлен ключ --quality или в настройках подкаста выставлен приоритет выбора качества
       // ------------------------------------------------------------------------
       iPriority = HmsMediaFormatPriority(StrToInt(sHeight), mpPodcastMediaFormats);
@@ -966,7 +966,7 @@ void GetLink_Kodik(string sLink) {
         }
       }
     }
-    if (sSelectedQual != '') MediaResourceLink = ' ' + QLIST.Values[sSelectedQual];
+    if (sSelectedQual != '') MediaResourceLink = QLIST.Values[sSelectedQual];
     if (bQualLog) {
       sMsg = 'Доступное качество: ';
       for (i = 0; i < QLIST.Count; i++) {
@@ -982,19 +982,22 @@ void GetLink_Kodik(string sLink) {
   } finally { JSON.Free; QLIST.Free; }
   
   if (LeftCopy(Trim(MediaResourceLink), 2)=='//')
-    MediaResourceLink = ' http:'+Trim(MediaResourceLink);
+    MediaResourceLink = 'http:'+Trim(MediaResourceLink);
   
-  // Получение длительности видео, если она не установлена
-  // ------------------------------------------------------------------------
-  sVal = Trim(PodcastItem.ItemOrigin[mpiTimeLength]);
-  if ((sVal=='') || (RightCopy(sVal, 6)=='00.000') || (RightCopy(sVal, 5)=='00:00') && (ExtractFileExt(MediaResourceLink)==".m3u8")) {
-    sHtml = HmsDownloadUrl(MediaResourceLink, 'Referer: '+sHeaders, true);
-    RE = TRegExpr.Create('#EXTINF:(\\d+.\\d+)', PCRE_SINGLELINE); f=0;
-    if (RE.Search(sHtml)) do f += StrToFloatDef(RE.Match(1), 0); while (RE.SearchAgain());
-    RE.Free;
-    if (f > 0) PodcastItem.ItemOrigin[mpiTimeLength] = HmsTimeFormat(Round(f))+'.000';
+  if (HmsRegExMatch('^[^?]+\\.m3u8', MediaResourceLink, '')) {
+    MediaResourceLink = ' '+Trim(MediaResourceLink);
+    // Получение длительности видео, если она не установлена
+    // ------------------------------------------------------------------------
+    sVal = Trim(PodcastItem.ItemOrigin[mpiTimeLength]);
+    if ((sVal=='') || (RightCopy(sVal, 6)=='00.000') || (RightCopy(sVal, 5)=='00:00') && (ExtractFileExt(MediaResourceLink)==".m3u8")) {
+      sHtml = HmsDownloadUrl(MediaResourceLink, 'Referer: '+sHeaders, true);
+      RE = TRegExpr.Create('#EXTINF:(\\d+.\\d+)', PCRE_SINGLELINE); f=0;
+      if (RE.Search(sHtml)) do f += StrToFloatDef(RE.Match(1), 0); while (RE.SearchAgain());
+      RE.Free;
+      if (f > 0) PodcastItem.ItemOrigin[mpiTimeLength] = HmsTimeFormat(Round(f))+'.000';
+    }
+    // ------------------------------------------------------------------------
   }
-  // ------------------------------------------------------------------------
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1075,7 +1078,7 @@ void MarkViewed() {
     if ((Trim(MediaResourceLink)!='') && (Pos('--markonplay', mpPodcastParameters)>0)) 
       MarkViewed();
     
-    if (Pos('m3u8', MediaResourceLink)>0) MediaResourceLink = ' '+Trim(MediaResourceLink);
+    if (Pos('.m3u8', MediaResourceLink)>0) MediaResourceLink = ' '+Trim(MediaResourceLink);
   } 
 
 }
