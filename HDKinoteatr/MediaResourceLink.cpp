@@ -984,13 +984,13 @@ void GetLink_Kodik(string sLink) {
   if (LeftCopy(Trim(MediaResourceLink), 2)=='//')
     MediaResourceLink = 'http:'+Trim(MediaResourceLink);
   
-  if (HmsRegExMatch('^[^?]+\\.m3u8', MediaResourceLink, '')) {
-    MediaResourceLink = ' '+Trim(MediaResourceLink);
+  if (ExtractFileExt(MediaResourceLink)=='.mp4') {
+    sLink = MediaResourceLink+':hls:manifest.m3u8';
     // Получение длительности видео, если она не установлена
     // ------------------------------------------------------------------------
     sVal = Trim(PodcastItem.ItemOrigin[mpiTimeLength]);
-    if ((sVal=='') || (RightCopy(sVal, 6)=='00.000') || (RightCopy(sVal, 5)=='00:00') && (ExtractFileExt(MediaResourceLink)==".m3u8")) {
-      sHtml = HmsDownloadUrl(MediaResourceLink, 'Referer: '+sHeaders, true);
+    if ((sVal=='') || (RightCopy(sVal, 6)=='00.000') || (RightCopy(sVal, 5)=='00:00') && (ExtractFileExt(sLink)==".m3u8")) {
+      sHtml = HmsDownloadUrl(sLink, 'Referer: '+sHeaders, true);
       RE = TRegExpr.Create('#EXTINF:(\\d+.\\d+)', PCRE_SINGLELINE); f=0;
       if (RE.Search(sHtml)) do f += StrToFloatDef(RE.Match(1), 0); while (RE.SearchAgain());
       RE.Free;
