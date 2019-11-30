@@ -1,4 +1,4 @@
-﻿// 2019.11.15
+﻿// 2019.11.30
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -785,27 +785,45 @@ void CreateLinks() {
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с ресурса tvmovies
 void GetLink_tvmovies(string sLink) {
-  string html, data, sHeight, sQual, sSelectedQual; int i, iPriority, iMinPriority=99;
+  string html, data, sHeight, sQual, sSelectedQual, sTransID, sTrans, sSeasonName; int i, n, iPriority, iMinPriority=99;
+  
   html = HmsUtf8Decode(HmsDownloadURL('https://hms.lostcut.net/proxy.php?'+sLink));
-  HmsRegExMatch('id="files"\\s*value=[\'"](.*?)[\'"]', html, data);
-  data = HmsJsonDecode(HmsHtmlToText(data));
     
+  // Собираем информацию о переводах
+  TStringList TRANS = TStringList.Create();
   TStringList QLIST = TStringList.Create();
-  TRegExpr RE = TRegExpr.Create('\\[(\\d+).*?\\]([^,\\s"\']+)');
-  if (RE.Search(data)) do {
-    sQual = RE.Match(1);
-    sLink = 'http:'+RE.Match(2);
-    sHeight = Format('%.5d', [StrToInt(sQual)]);
-    QLIST.Values[sHeight] = sLink;
-    MediaResourceLink = " "+sLink; // по-умолчанию
-    // Если установлен ключ --quality или в настройках подкаста выставлен приоритет выбора качества
-    // ------------------------------------------------------------------------
-    iPriority = HmsMediaFormatPriority(StrToInt(sHeight), mpPodcastMediaFormats);
-    if ((iPriority >= 0) && (iPriority < iMinPriority)) {
-      iMinPriority  = iPriority;
-      sSelectedQual = sHeight;
-    }
-  } while (RE.SearchAgain());
+  if (HmsRegExMatch('(<div[^>]+translations.*?</div>)', HmsRemoveLineBreaks(html), data)) {
+    TRegExpr RE = TRegExpr.Create('<option[^>]+value="(.*?)".*?</option>', PCRE_SINGLELINE);
+    if (RE.Search(data)) do {
+      TRANS.Values[RE.Match(1)] = HmsHtmlToText(RE.Match(0));
+    } while (RE.SearchAgain());
+  }
+  HmsRegExMatch('id="files"\\s*value=[\'"](.*?)[\'"]', html, data);
+  TJsonObject PLAYLIST = TJsonObject.Create();
+  PLAYLIST.LoadFromString(HmsHtmlDecode(data));
+  for (int nTrans=0; nTrans<PLAYLIST.Count; nTrans++) {
+    sTransID = PLAYLIST.Names[nTrans];
+    sTrans   = TRANS.Values[sTransID]; // Название озвучки
+    data = PLAYLIST.S[sTransID];
+    QLIST.Clear();
+    RE = TRegExpr.Create('\\[(\\d+).*?\\]([^,\\s"\']+)');
+    if (RE.Search(data)) do {
+      sQual = RE.Match(1);
+      sLink = 'http:'+RE.Match(2);
+      sHeight = Format('%.5d', [StrToInt(sQual)]);
+      QLIST.Values[sHeight] = sLink;
+      MediaResourceLink = " "+sLink; // по-умолчанию
+      // Если установлен ключ --quality или в настройках подкаста выставлен приоритет выбора качества
+      // ------------------------------------------------------------------------
+      iPriority = HmsMediaFormatPriority(StrToInt(sHeight), mpPodcastMediaFormats);
+      if ((iPriority >= 0) && (iPriority < iMinPriority)) {
+        iMinPriority  = iPriority;
+        sSelectedQual = sHeight;
+      }
+    } while (RE.SearchAgain());
+    if (Pos(sTrans, mpTitle)>0) break;
+  } //for (int nTrans=0; nTrans<PLAYLIST.Count; nTrans++)
+  RE.free; TRANS.Free;
   HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
   QLIST.Sort();
   if (QLIST.Count > 0) {
@@ -838,13 +856,13 @@ void GetLink_tvmovies(string sLink) {
     HmsLogMessage(1, mpTitle+'. '+sMsg);
   }
   
-  QLIST.Free; RE.Free;
+  QLIST.Free;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с ресурса buildplayer
 void GetLink_HLS(string sLink) {
-  string html = HmsDownloadURL(sLink, 'Referer: '+mpFilePath);
+  string html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
   HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
   HmsRegExMatch('"hls":"(.*?)"'          , html, MediaResourceLink); // Второй вариант
   MediaResourceLink = HmsJsonDecode(MediaResourceLink);
@@ -919,10 +937,11 @@ void GetLink_Kodik(string sLink) {
     LINKS = JSON.O['links'];
     for (i = 0; i < LINKS.Count; i++) {
       sName = LINKS.Names[i];
-      sLink = LINKS.S[sName+'\\0\\src'];
+      sLink = "http:"+LINKS.S[sName+'\\0\\src'];
+      HmsRegExMatch('^(.*?\\.mp4):hls:manifest.m3u8', sLink, sLink);
       sHeight = Format('%.5d', [StrToInt(sName)]);
       QLIST.Values[sHeight] = sLink;
-      MediaResourceLink = " http:"+sLink; // по-умолчанию
+      MediaResourceLink = " "+sLink; // по-умолчанию
       // Если установлен ключ --quality или в настройках подкаста выставлен приоритет выбора качества
       // ------------------------------------------------------------------------
       iPriority = HmsMediaFormatPriority(StrToInt(sHeight), mpPodcastMediaFormats);
@@ -983,9 +1002,11 @@ void GetLink_Kodik(string sLink) {
 void GetLink() {
   if      (Pos('videoframe.at', mpFilePath)>0) GetLink_Videoframe (mpFilePath);
   else if (Pos('tvmovies.in'  , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
+  else if (Pos('cdn.tv'       , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
   else if (Pos('buildplayer'  , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('farsihd'      , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('kodik'        , mpFilePath)>0) GetLink_Kodik      (mpFilePath);
+  else if (HmsRegExMatch('//vid\\d+', mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube31(mpFilePath);
   else if (LeftCopy(mpFilePath, 4)=='Info') VideoPreview();
   else if (LeftCopy(mpFilePath, 4)=='-Fav') AddRemoveFavorites();
@@ -1053,6 +1074,8 @@ void MarkViewed() {
     
     if ((Trim(MediaResourceLink)!='') && (Pos('--markonplay', mpPodcastParameters)>0)) 
       MarkViewed();
+    
+    if (Pos('m3u8', MediaResourceLink)>0) MediaResourceLink = ' '+Trim(MediaResourceLink);
   } 
 
 }
