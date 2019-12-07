@@ -1,4 +1,4 @@
-﻿// 2019.11.30
+﻿// 2019.12.07
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -864,7 +864,7 @@ void GetLink_tvmovies(string sLink) {
 void GetLink_HLS(string sLink) {
   string html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
   HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
-  HmsRegExMatch('"hls":"(.*?)"'          , html, MediaResourceLink); // Второй вариант
+  HmsRegExMatch('"(?:hls|file)":"(.*?)"' , html, MediaResourceLink); // Второй вариант
   MediaResourceLink = HmsJsonDecode(MediaResourceLink);
   if (LeftCopy(MediaResourceLink, 1)=='/') MediaResourceLink = HmsExpandLink(MediaResourceLink, 'http:');
 }
@@ -876,7 +876,7 @@ void GetLink_videoframe(string sLink) {
   headers = "https://videoframe.at/\r\n"+
             "X-REF: hdkinoteatr.com\r\n"+
             "Origin: https://videoframe.at\r\n";
-  html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
+  html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+headers));
   HmsRegExMatch('data-token=[\'"](.*?)[\'"]', html, token);
   HmsRegExMatch('data-type=[\'"](.*?)[\'"]' , html, type );
   HmsRegExMatch('season\\s*=\\s*[\'"](\\d+)[\'"]' , html, season );
@@ -1003,13 +1003,15 @@ void GetLink_Kodik(string sLink) {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка ссылки на известные нам ресурсы видео и получение ссылки на поток
 void GetLink() {
-  if      (Pos('videoframe.at', mpFilePath)>0) GetLink_Videoframe (mpFilePath);
+  if      (Pos('videoframe'   , mpFilePath)>0) GetLink_Videoframe (mpFilePath);
   else if (Pos('tvmovies.in'  , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
   else if (Pos('cdn.tv'       , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
+  else if (Pos('videocdn'     , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
   else if (Pos('buildplayer'  , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('farsihd'      , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('kodik'        , mpFilePath)>0) GetLink_Kodik      (mpFilePath);
-  else if (HmsRegExMatch('//vid\\d+', mpFilePath, '')) GetLink_HLS(mpFilePath);
+  else if (HmsRegExMatch('pleer\\w{2}\\.', mpFilePath, '')) GetLink_HLS(mpFilePath);
+  else if (HmsRegExMatch('//vid\\d+'     , mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube31(mpFilePath);
   else if (LeftCopy(mpFilePath, 4)=='Info') VideoPreview();
   else if (LeftCopy(mpFilePath, 4)=='-Fav') AddRemoveFavorites();
