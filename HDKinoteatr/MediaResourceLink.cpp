@@ -1,4 +1,4 @@
-﻿// 2019.12.07
+﻿// 2020.01.11
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -26,133 +26,111 @@ THmsScriptMediaItem GetRoot() {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки на Youtube
-bool GetLink_Youtube31(string sLink) {
-  string sData, sVideoID='', sMaxHeight='', sAudio='', sSubtitlesLanguage='ru',
-  sSubtitlesUrl, sFile, sVal, sMsg, sConfig, sHeaders, ttsDef; 
-  TJsonObject JSON; TRegExpr RegEx;
+bool GetLink_Youtube33(string sLink) {
+  string sData, sVideoID='', sAudio='', sSubtitlesLanguage='ru',
+  sSubtitlesUrl, sFile, sVal, sMsg, sConfig, sHeaders, hlsUrl, subsUrl, jsUrl, 
+  streamMap, algorithm, sType, itag, sig, alg, s, sp; TStringList QLIST;
+  int i, n, w, num, height, priority, minPriority = 90, selHeight, maxHeight = 1080, audioQual;
+  TJsonObject JSON, PLAYER_RESPONSE, VIDEO; TJsonArray FORMATS, SUBS; TRegExpr RegEx;
   
   sHeaders = 'Referer: '+sLink+'\r\n'+
              'User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36\r\n'+
              'Origin: https://www.youtube.com\r\n';
   
-  HmsRegExMatch('--maxheight=(\\d+)'    , mpPodcastParameters, sMaxHeight);
+  if (HmsRegExMatch('--maxheight=(\\d+)', mpPodcastParameters, sVal)) maxHeight = StrToInt(sVal);
   HmsRegExMatch('--sublanguage=(\\w{2})', mpPodcastParameters, sSubtitlesLanguage);
-  bool bSubtitles = (Pos('--subtitles'  , mpPodcastParameters)>0);  
-  bool bAdaptive  = (Pos('--adaptive'   , mpPodcastParameters)>0);  
-  bool bNotDE     = (Pos('notde=1'      , sLink)>0);  
+  bool bSubtitles = Pos('--subtitles' , mpPodcastParameters)>0;  
+  bool bAdaptive  = Pos('--adaptive'  , mpPodcastParameters)>0;  
+  bool bQualLog   = Pos('--qualitylog', mpPodcastParameters)>0;
   
   if (!HmsRegExMatch('[\\?&]v=([^&]+)'       , sLink, sVideoID))
-    if (!HmsRegExMatch('youtu.be/([^&]+)'      , sLink, sVideoID))
-    HmsRegExMatch('/(?:embed|v)/([^\\?]+)', sLink, sVideoID);
+  if (!HmsRegExMatch('youtu.be/([^&]+)'      , sLink, sVideoID))
+       HmsRegExMatch('/(?:embed|v)/([^\\?]+)', sLink, sVideoID);
   
-  if (sVideoID=='') return VideoMessage('Невозможно получить Video ID в ссылке Youtube');
+  if (sVideoID=='') return;
   
   sLink = 'https://www.youtube.com/watch?v='+sVideoID+'&hl=ru';
-  
   sData = HmsDownloadURL(sLink, sHeaders, true);
   sData = HmsRemoveLineBreaks(sData);
-  bool isLive = HmsRegExMatch('"live_playback":"1"', sData, '');
   
-  // Если еще не установлена реальная длительность видео - устанавливаем
-  if ((Trim(mpTimeLength)=='') || (RightCopy(mpTimeLength, 6)=='00.000') && !isLive) {
-    if (HmsRegExMatch2('itemprop="duration"[^>]+content="..(\\d+)M(\\d+)S', sData, sVal, sMsg)) {
-      PodcastItem[mpiTimeLength] = HmsTimeFormat(StrToInt(sVal)*60+StrToInt(sMsg));
-    } else {
-      sVal = HmsDownloadURL('http://www.youtube.com/get_video_info?html5=1&c=WEB&cver=html5&cplayer=UNIPLAYER&hl=ru&video_id='+sVideoID, sHeaders, true);
-      if (HmsRegExMatch('length_seconds=(\\d+)', sData, sMsg))
-        PodcastItem[mpiTimeLength] = HmsTimeFormat(StrToInt(sMsg));
-    }
-  }
-  if (!HmsRegExMatch('player.config\\s*?=\\s*?({.*?});', sData, sConfig)) {
-    // Если в загруженной странице нет нужной информации, пробуем немного по-другому
-    sLink = 'http://hms.lostcut.net/youtube/g.php?v='+sVideoID;
-    if (sMaxHeight!=''                  ) sLink += '&max_height='+sMaxHeight;
-    if (Trim(mpPodcastMediaFormats )!='') sLink += '&media_formats='+mpPodcastMediaFormats;
-    if (bAdaptive                       ) sLink += '&adaptive=1';
-    sData = HmsUtf8Decode(HmsDownloadUrl(sLink));
-    if (HmsRegExMatch('"reason":"(.*?)"' , sData, sMsg)) { 
-      HmsLogMessage(2 , sMsg); 
-      VideoMessage(sMsg); 
-      return; 
-    } else {
-      sData = HmsJsonDecode(sData);
-      HmsRegExMatch('"url":"(.*?)"', sData, MediaResourceLink);
-      return true;
-    }
+  if (!HmsRegExMatch('player.config\\s*=\\s*({.*?});', sData, sConfig, 1, PCRE_SINGLELINE)) {
+    HmsLogMessage(2 , mpTitle+': No player.config data in loaded page.'); 
+    return; 
   }
   
-  String hlsUrl, ttsUrl, flp, jsUrl, dashMpdLink, streamMap, playerId, algorithm;
-  String sType, itag, sig, alg, s;
-  String UrlBase = "";
-  int  i, n, w, num, height, priority, minPriority = 90, selHeight, maxHeight = 1080;
-  bool is3D; 
-  TryStrToInt(sMaxHeight, maxHeight);
   JSON = TJsonObject.Create();
+  PLAYER_RESPONSE = TJsonObject.Create();
+  QLIST = TStringList.Create();
   try {
     JSON.LoadFromString(sConfig);
-    hlsUrl      = HmsExpandLink(JSON.S['args\\hlsvp' ], UrlBase);
-    if ((hlsUrl=='') && JSON.B['args\\player_response']) {
-      TJsonObject JSON2 = TJsonObject.Create();
-      try {
-        JSON2.LoadFromString(JSON.S['args\\player_response']);
-        hlsUrl = JSON2.S['streamingData\\hlsManifestUrl'];
-      } finally { JSON2.Free; }
-      
-    }
-    ttsUrl      = HmsExpandLink(JSON.S['args\\caption_tracks'], UrlBase);
-    flp         = HmsExpandLink(JSON.S['url'         ], UrlBase);
-    jsUrl       = HmsExpandLink(JSON.S['assets\\js'  ], UrlBase);
-    streamMap   = JSON.S['args\\url_encoded_fmt_stream_map'];
-    if (bAdaptive && JSON.B['args\\adaptive_fmts']) 
-      streamMap = JSON.S['args\\adaptive_fmts'];
-    if ((streamMap=='') && (hlsUrl=='')) {
-      sMsg = "Невозможно найти данные для воспроизведения на странице видео.";
-      if (HmsRegExMatch('(<h\\d[^>]+class="message".*?</h\\d>)', sData, sMsg)) sMsg = HmsUtf8Decode(HmsHtmlToText(sMsg));
-      HmsLogMessage(2, sMsg);
-      VideoMessage(sMsg); 
-      return;
-    }
-  } finally { JSON.Free; }
-  
-  if (hlsUrl!='') {
-    MediaResourceLink = ' '+hlsUrl;
-    sData = HmsDownloadUrl(hlsUrl, sHeaders, true);
-    RegEx = TRegExpr.Create('BANDWIDTH=(\\d+).*?RESOLUTION=(\\d+)x(\\d+).*?(http[^#]*)', PCRE_SINGLELINE);
-    try {
-      if (RegEx.Search(sData)) do {
-        sLink = '' + RegEx.Match(4);
-        height = StrToIntDef(RegEx.Match(3), 0);
-        if (mpPodcastMediaFormats!='') {
-          priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
-          if ((priority>=0) && (priority>minPriority)) {
-            MediaResourceLink = sLink; minPriority = priority;
-          }
-        } else if ((height > selHeight) && (height <= maxHeight)) {
-          MediaResourceLink = sLink; selHeight = height;
-        }
-      } while (RegEx.SearchAgain());
-    } finally { RegEx.Free(); }
+    PLAYER_RESPONSE.LoadFromString(JSON.S['args\\player_response']);
     
-  } else if (streamMap!='') {
-    if (Copy(jsUrl, 1, 2)=='//') jsUrl = 'http:'+Trim(jsUrl);
-    HmsRegExMatch('/player-([\\w_-]+)/', jsUrl, playerId);
-    algorithm = HmsDownloadURL('https://hms.lostcut.net/youtube/getalgo.php?jsurl='+HmsHttpEncode(jsUrl));
-    i=1; while (i<=Length(streamMap)) {
-      sData = Trim(ExtractStr(streamMap, ',', i));
-      sType = HmsHttpDecode(ExtractParam(sData, 'type', '', '&'));
-      itag  = ExtractParam(sData, 'itag'    , '', '&');
-      is3D  = ExtractParam(sData, 'stereo3d', '', '&') == '1';
-      sLink = '';
-      if (Pos('url=', sData)>0) {
-        sLink = ' ' + HmsHttpDecode(ExtractParam(sData, 'url', '', '&'));
-        if (Pos('&signature=', sLink)==0) {
-          bool bOldSignature = true;
-          sig = HmsHttpDecode(ExtractParam(sData, 'sig', '', '&'));
-          if (sig=='') {
-            HmsRegExMatch('\[\\A|&|"]s=([^&,"]+)', sData, sig);
-            sig = HmsHttpDecode(sig);
-            bOldSignature = false;
+    // Если есть субтитры и в дополнительных параметрах указано их показывать - загружаем 
+    if (bSubtitles && PLAYER_RESPONSE.B['captions\\playerCaptionsTracklistRenderer\\captionTracks']) {
+      string sTime1, sTime2, engSubs; float nStart, nDur;
+      SUBS = PLAYER_RESPONSE.O['captions\\playerCaptionsTracklistRenderer\\captionTracks'].AsArray;
+      for (i=0; i < SUBS.Length; i++) {
+        if (SUBS[i].S['languageCode']==sSubtitlesLanguage) subsUrl = SUBS[i].S['baseUrl'];
+        if (SUBS[i].S['languageCode']=='en'              ) engSubs = SUBS[i].S['baseUrl'];
+      }
+      if ((subsUrl=='') && (engSubs!='')) subsUrl = engSubs+'&tlang='+sSubtitlesLanguage;
+      if (subsUrl!='') {
+        sData = HmsDownloadURL(subsUrl+'&fmt=srv3', sHeaders, true);
+        sMsg  = ''; i = 0;
+        RegEx = TRegExpr.Create('(<(text|p).*?</(text|p)>)', PCRE_SINGLELINE); // Convert to srt format
+        try {
+          if (RegEx.Search(sData)) do {
+            if      (HmsRegExMatch('start="([\\d\\.]+)', RegEx.Match, sVal)) nStart = StrToFloat(ReplaceStr(sVal, '.', ','))*1000;
+            else if (HmsRegExMatch('t="(\\d+)'         , RegEx.Match, sVal)) nStart = StrToFloat(sVal);
+            if      (HmsRegExMatch('dur="([\\d\\.]+)'  , RegEx.Match, sVal)) nDur   = StrToFloat(ReplaceStr(sVal, '.', ','))*1000;
+            else if (HmsRegExMatch('d="(\\d+)'         , RegEx.Match, sVal)) nDur   = StrToFloat(sVal);
+            sTime1 = HmsTimeFormat(Int(nStart/1000))+','+RightCopy(Str(nStart), 3);
+            sTime2 = HmsTimeFormat(Int((nStart+nDur)/1000))+','+RightCopy(Str(nStart+nDur), 3);
+            sMsg += Format("%d\n%s --> %s\n%s\n\n", [i, sTime1, sTime2, HmsHtmlToText(HmsHtmlToText(RegEx.Match(0), 65001))]);
+            i++;
+          } while (RegEx.SearchAgain());
+        } finally { RegEx.Free(); }
+        sFile = HmsSubtitlesDirectory+'\\Youtube\\'+PodcastItem.ItemID+'.'+sSubtitlesLanguage+'.srt';
+        HmsStringToFile(sMsg, sFile);
+        if (Trim(PodcastItem[mpiSubtitleLanguage])!='') bAdaptive = false;
+        PodcastItem[mpiSubtitleLanguage] = sFile;
+      }
+    }
+    
+    hlsUrl = PLAYER_RESPONSE.S['streamingData\\hlsManifestUrl'];
+    jsUrl  = JSON.S['assets\\js'];
+    
+    if (hlsUrl!='') {
+      MediaResourceLink = ' '+hlsUrl;
+      bAdaptive = false;
+      sData = HmsDownloadUrl(hlsUrl, sHeaders, true);
+      RegEx = TRegExpr.Create('BANDWIDTH=(\\d+).*?RESOLUTION=(\\d+)x(\\d+).*?(http[^#]*)', PCRE_SINGLELINE);
+      try {
+        if (RegEx.Search(sData)) do {
+          sLink = '' + RegEx.Match(4);
+          height = StrToIntDef(RegEx.Match(3), 0);
+          if (mpPodcastMediaFormats!='') {
+            priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
+            if ((priority>=0) && (priority>minPriority)) {
+              MediaResourceLink = sLink; minPriority = priority;
+            }
+          } else if ((height > selHeight) && (height <= maxHeight)) {
+            MediaResourceLink = sLink; selHeight = height;
           }
+          QLIST.Values[Format('%.4d', [height])] = sLink;
+        } while (RegEx.SearchAgain());
+      } finally { RegEx.Free(); }
+      
+    } else if (PLAYER_RESPONSE.B['streamingData\\formats']) {
+      FORMATS = PLAYER_RESPONSE.O['streamingData\\formats'].AsArray;
+      if (FORMATS[0].B['cipher'])
+        algorithm = HmsDownloadURL('https://hms.lostcut.net/youtube/getalgo.php?jsurl='+HmsHttpEncode(jsUrl));
+      for(i=0; i<FORMATS.Length; i++) {
+        VIDEO = FORMATS[i];
+        if (VIDEO.B['cipher']) {
+          sLink = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 'url', '', '&'));
+          sig   = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 's'  , '', '&'));
+          sp    = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 'sp' , '', '&'));
           if (sig!='') {
             for (w=1; w<=WordCount(algorithm, ' '); w++) {
               alg = ExtractWord(w, algorithm, ' ');
@@ -163,27 +141,12 @@ bool GetLink_Youtube31(string sLink) {
               if (alg[1]=='w') {n = (num-Trunc(num/Length(sig)))+1; Swap(sig[1], sig[n]);} // Swap
             }
           }
-          if (sig!='') {
-            if (bOldSignature) sLink += '&signature=' + sig;
-            else               sLink += '&sig='       + sig;
-          }
+          sLink += '&'+sp+'='+sig;
+        } else {
+          sLink = VIDEO.S['url'];
         }
-      }
-      if (itag in ([139,140,141,171,172,249,250,251])) { sAudio = sLink; continue; }
-      if (sLink!='') {
-        height = 0; // https://gist.github.com/sidneys/7095afe4da4ae58694d128b1034e01e2
-        if      (itag in ([13,17,160,278                                            ])) height = 144;
-        else if (itag in ([5,36,92,132,133,242,331                                  ])) height = 240;
-        else if (itag in ([6                                                        ])) height = 270;
-        else if (itag in ([18,34,43,82,100,93,134,167,243,332                       ])) height = 360;
-        else if (itag in ([35,44,59,78,83,101,94,135,212,168,218,219,244,245,246,333])) height = 480;
-        else if (itag in ([22,45,84,102,95,136,298,169,247,302,334                  ])) height = 720;
-        else if (itag in ([37,46,85,96,137,170,248,299,303,335                      ])) height = 1080;
-        else if (itag in ([264,271,308,336                                          ])) height = 1440;
-        else if (itag in ([266,313,315,138,337                                      ])) height = 2160;
-        else if (itag in ([38                                                       ])) height = 3072;
-        else if (itag in ([272                           ])) height = 4320;
-        else continue;
+        height = VIDEO.I['height'];
+        if (height>0) QLIST.Values[Format('%.4d', [height])] = sLink;
         if (mpPodcastMediaFormats!='') {
           priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
           if ((priority>=0) || (priority<minPriority)) {
@@ -192,47 +155,75 @@ bool GetLink_Youtube31(string sLink) {
         } else if ((height>selHeight) && (height<= maxHeight)) {
           MediaResourceLink = sLink; selHeight = height;
           
-        } else if ((height>=selHeight) && (height<= maxHeight) && (itag in ([18,22,37,38,82,83,84,85]))) {
-          // Если выоста такая же, но формат MP4 - то выбираем именно его (делаем приоритет MP4)
+        } else if ((height>=selHeight) && (height<= maxHeight) && (VIDEO.I['itag'] in ([18,22,37,38,82,83,84,85]))) {
+          // Если высота такая же, но формат MP4 - то выбираем именно его (делаем приоритет MP4)
           MediaResourceLink = sLink; selHeight = height;
         }
       }
+    } 
+    if (bAdaptive || (MediaResourceLink=='') && PLAYER_RESPONSE.B['streamingData\\adaptiveFormats']) {
+      FORMATS = PLAYER_RESPONSE.O['streamingData\\adaptiveFormats'].AsArray;
+      if (FORMATS[0].B['cipher'] && (algorithm==''))
+        algorithm = HmsDownloadURL('https://hms.lostcut.net/youtube/getalgo.php?jsurl='+HmsHttpEncode(jsUrl));
+      for(i=0; i<FORMATS.Length; i++) {
+        VIDEO = FORMATS[i];
+        if (VIDEO.B['cipher']) {
+          sLink = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 'url', '', '&'));
+          sig   = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 's'  , '', '&'));
+          sp    = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 'sp' , '', '&'));
+          if (sig!='') {
+            for (w=1; w<=WordCount(algorithm, ' '); w++) {
+              alg = ExtractWord(w, algorithm, ' ');
+              if (Length(alg)<1) continue;
+              if (Length(alg)>1) TryStrToInt(Copy(alg, 2, 4), num);
+              if (alg[1]=='r') {s=''; for(n=Length(sig); n>0; n--) s+=sig[n]; sig = s;   } // Reverse
+              if (alg[1]=='s') {sig = Copy(sig, num+1, Length(sig));                     } // Clone
+              if (alg[1]=='w') {n = (num-Trunc(num/Length(sig)))+1; Swap(sig[1], sig[n]);} // Swap
+            }
+          }
+          sLink += '&'+sp+'='+sig;
+        } else {
+          sLink = VIDEO.S['url'];
+        }
+        if (VIDEO.B['audioSampleRate'] && (audioQual < VIDEO.I['bitrate'])) {
+          sAudio = sLink; audioQual = VIDEO.I['bitrate']; continue; 
+        }
+        height = VIDEO.I['height'];
+        if (height>0) QLIST.Values[Format('%.4d', [height])] = sLink;
+        if (mpPodcastMediaFormats!='') {
+          priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
+          if ((priority>=0) || (priority<minPriority)) {
+            MediaResourceLink = sLink; minPriority = priority; selHeight = height;
+          }
+        } else if ((height>selHeight) && (height<= maxHeight)) {
+          MediaResourceLink = sLink; selHeight = height;
+        }
+      }
+      sVal = ""; if (Trim(mpTimeStart)!="") sVal = " -ss "+mpTimeStart;
+      if (bAdaptive && (sAudio!='')) {
+        if (Pos('--downloadaudio', mpPodcastParameters)>0) {
+          sFile = HmsTempDirectory+'\\'+PodcastItem.ItemID+'.webm';
+          if (!FileExists(sFile))
+            HmsDownloadURLToFile(sAudio, sFile, sHeaders, true);
+        } else sFile = sAudio;
+        MediaResourceLink = '-hide_banner -reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 2 -fflags +genpts -i "'+Trim(MediaResourceLink)+'"'+sVal+' -i "'+Trim(sFile)+'"';
+      }
     }
-    sVal = ""; if (Trim(mpTimeStart)!="") sVal = " -ss "+mpTimeStart;
-    if (bAdaptive && (sAudio!='')) MediaResourceLink = '-hide_banner -reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 2 -fflags +genpts -i "'+Trim(MediaResourceLink)+'"'+sVal+' -i "'+Trim(sAudio)+'"';
-  }
-  // Если есть субтитры и в дополнительных параметрах указано их показывать - загружаем 
-  if (bSubtitles && (ttsUrl!='')) {
-    string sTime1, sTime2; float nStart, nDur;
-    sLink = ''; n = WordCount(ttsUrl, ',');
-    for (i=1; i <= n; i++) {
-      sData = ExtractWord(i, ttsUrl, ',');
-      sType = HmsPercentDecode(ExtractParam(sData, 'lc', '', '&'));
-      sVal  = HmsPercentDecode(ExtractParam(sData, 'u' , '', '&'));
-      if (sType == 'en') sLink = sVal;
-      if (sType == sSubtitlesLanguage) { sLink = sVal; break; }
+    // Если еще не установлена реальная длительность видео - устанавливаем
+    if ((Trim(mpTimeLength)=='') || (RightCopy(mpTimeLength, 6)=='00.000') && (hlsUrl=='')) {
+      PodcastItem[mpiTimeLength] = HmsTimeFormat(PLAYER_RESPONSE.I['videoDetails\\lengthSeconds']);
     }
-    if (sLink != '') {
-      sData = HmsDownloadURL(sLink, sHeaders, true);
-      sMsg  = ''; i = 0;
-      RegEx = TRegExpr.Create('(<(text|p).*?</(text|p)>)', PCRE_SINGLELINE); // Convert to srt format
-      try {
-        if (RegEx.Search(sData)) do {
-          if      (HmsRegExMatch('start="([\\d\\.]+)', RegEx.Match, sVal)) nStart = StrToFloat(ReplaceStr(sVal, '.', ','))*1000;
-          else if (HmsRegExMatch('t="(\\d+)'         , RegEx.Match, sVal)) nStart = StrToFloat(sVal);
-          if      (HmsRegExMatch('dur="([\\d\\.]+)'  , RegEx.Match, sVal)) nDur   = StrToFloat(ReplaceStr(sVal, '.', ','))*1000;
-          else if (HmsRegExMatch('d="(\\d+)'         , RegEx.Match, sVal)) nDur   = StrToFloat(sVal);
-          sTime1 = HmsTimeFormat(Int(nStart/1000))+','+RightCopy(Str(nStart), 3);
-          sTime2 = HmsTimeFormat(Int((nStart+nDur)/1000))+','+RightCopy(Str(nStart+nDur), 3);
-          sMsg += Format("%d\n%s --> %s\n%s\n\n", [i, sTime1, sTime2, HmsHtmlToText(HmsHtmlToText(RegEx.Match(0), 65001))]);
-          i++;
-        } while (RegEx.SearchAgain());
-      } finally { RegEx.Free(); }
-      sFile = HmsSubtitlesDirectory+'\\Youtube\\'+PodcastItem.ItemID+'.'+sSubtitlesLanguage+'.srt';
-      HmsStringToFile(sMsg, sFile);
-      PodcastItem[mpiSubtitleLanguage] = sFile;
+    if (bQualLog) {
+      QLIST.Sort();
+      sMsg = 'Доступное качество: ';
+      for (i = 0; i < QLIST.Count; i++) {
+        if (i>0) sMsg += ', ';
+        sMsg += IntToStr(StrToInt(QLIST.Names[i])); // Обрезаем лидирующие нули
+      }
+      sMsg += '. Выбрано: ' + Str(selHeight);
+      HmsLogMessage(1, mpTitle+'. '+sMsg);
     }
-  }
+  } finally { JSON.Free; PLAYER_RESPONSE.Free; QLIST.Free; }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1012,7 +1003,7 @@ void GetLink() {
   else if (Pos('kodik'        , mpFilePath)>0) GetLink_Kodik      (mpFilePath);
   else if (HmsRegExMatch('pleer\\w{2}\\.', mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('//vid\\d+'     , mpFilePath, '')) GetLink_HLS(mpFilePath);
-  else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube31(mpFilePath);
+  else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube33(mpFilePath);
   else if (LeftCopy(mpFilePath, 4)=='Info') VideoPreview();
   else if (LeftCopy(mpFilePath, 4)=='-Fav') AddRemoveFavorites();
   else MediaResourceLink = '-headers "Referer: https://pleerzx.club/embed/e987ec847deaa26e3ca126f3ab549823/e/bd755278629227c137a78892d045a708/?referer=hdkinoteatr.com" -i "'+mpFilePath+'"';
