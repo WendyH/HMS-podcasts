@@ -1,4 +1,4 @@
-﻿// 2020.01.11
+﻿// 2020.01.13
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -853,10 +853,39 @@ void GetLink_tvmovies(string sLink) {
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с ресурса buildplayer
 void GetLink_HLS(string sLink) {
-  string html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
+  string sQual, sSelectedQual, html;
+  html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
   HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
   HmsRegExMatch('"(?:hls|file)":"(.*?)"' , html, MediaResourceLink); // Второй вариант
   MediaResourceLink = HmsJsonDecode(MediaResourceLink);
+  if (LeftCopy(MediaResourceLink, 1)=='[') {
+    TStringList QLIST = TStringList.Create();
+    int n = WordCount(MediaResourceLink, ',');
+    for (int i=1; i<=n; i++) {
+      sLink = ExtractWord(i, MediaResourceLink, ',');
+      HmsRegExMatch2('\\[(\\d+).*?\\](.*)', sLink, sQual, sLink);
+      QLIST.Values[Format('%.4d', [StrToInt(sQual)])] = sLink;
+    }
+    QLIST.Sort();
+    HmsRegExMatch('--quality=(\\w+)', mpPodcastParameters, sQual);
+    if (QLIST.Count > 0) {
+      if      (sQual=='low'   ) sSelectedQual = QLIST.Names[0];
+      else if (sQual=='medium') sSelectedQual = QLIST.Names[Round((QLIST.Count-1) / 2)];
+      else if (sQual=='high'  ) sSelectedQual = QLIST.Names[QLIST.Count - 1];
+      else if (HmsRegExMatch('(\\d+)', sQual, sQual)) {
+        extended minDiff = 999999; // search nearest quality
+        for (i=0; i < QLIST.Count; i++) {
+          extended diff = StrToInt(QLIST.Names[i]) - StrToInt(sQual);
+          if (Abs(diff) < minDiff) {
+            minDiff = Abs(diff);
+            sSelectedQual = QLIST.Names[i];
+          }
+        }
+      }
+    }
+    MediaResourceLink = QLIST.Values[sSelectedQual];
+    QLIST.Free();
+  }
   if (LeftCopy(MediaResourceLink, 1)=='/') MediaResourceLink = HmsExpandLink(MediaResourceLink, 'http:');
 }
 
@@ -1006,7 +1035,7 @@ void GetLink() {
   else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube33(mpFilePath);
   else if (LeftCopy(mpFilePath, 4)=='Info') VideoPreview();
   else if (LeftCopy(mpFilePath, 4)=='-Fav') AddRemoveFavorites();
-  else MediaResourceLink = '-headers "Referer: https://pleerzx.club/embed/e987ec847deaa26e3ca126f3ab549823/e/bd755278629227c137a78892d045a708/?referer=hdkinoteatr.com" -i "'+mpFilePath+'"';
+  else GetLink_HLS(mpFilePath);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
