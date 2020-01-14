@@ -1,4 +1,4 @@
-﻿// 2020.01.13
+﻿// 2020.01.14
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -1035,6 +1035,7 @@ void GetLink() {
   else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube33(mpFilePath);
   else if (LeftCopy(mpFilePath, 4)=='Info') VideoPreview();
   else if (LeftCopy(mpFilePath, 4)=='-Fav') AddRemoveFavorites();
+  else if ((HmsFileMediaType(mpFilePath)==mtVideo) || (HmsFileMediaType(mpFilePath)==7)) MediaResourceLink = mpFilePath;
   else GetLink_HLS(mpFilePath);
 }
 
