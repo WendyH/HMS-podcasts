@@ -1,4 +1,4 @@
-﻿// 2020.01.14
+﻿// 2020.02.09
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -774,6 +774,18 @@ void CreateLinks() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Декодирование ссылок для HTML5 плеера
+string Html5Decode(string sEncoded) {
+  if ((sEncoded=="") || (Pos(".", sEncoded) > 0)) return sEncoded;
+  if (sEncoded[1]=="#") sEncoded = Copy(sEncoded, 2, Length(sEncoded)-1);
+  string sDecoded = "";
+  for (int i=1; i <= Length(sEncoded); i+=3) {
+    sDecoded += "\\u0" + Copy(sEncoded, i, 3);
+  }
+  return HmsJsonDecode(sDecoded);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с ресурса tvmovies
 void GetLink_tvmovies(string sLink) {
   string html, data, sHeight, sQual, sSelectedQual, sTransID, sTrans, sSeasonName; int i, n, iPriority, iMinPriority=99;
@@ -795,7 +807,7 @@ void GetLink_tvmovies(string sLink) {
   for (int nTrans=0; nTrans<PLAYLIST.Count; nTrans++) {
     sTransID = PLAYLIST.Names[nTrans];
     sTrans   = TRANS.Values[sTransID]; // Название озвучки
-    data = PLAYLIST.S[sTransID];
+    data = Html5Decode(PLAYLIST.S[sTransID]);
     QLIST.Clear();
     RE = TRegExpr.Create('\\[(\\d+).*?\\]([^,\\s"\']+)');
     if (RE.Search(data)) do {
