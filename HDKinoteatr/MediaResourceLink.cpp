@@ -1,4 +1,4 @@
-﻿// 2020.02.09
+﻿// 2020.02.14
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -777,7 +777,8 @@ void CreateLinks() {
 // Декодирование ссылок для HTML5 плеера
 string Html5Decode(string sEncoded) {
   if ((sEncoded=="") || (Pos(".", sEncoded) > 0)) return sEncoded;
-  if (sEncoded[1]=="#") sEncoded = Copy(sEncoded, 2, Length(sEncoded)-1);
+  if (sEncoded[1]!="#") return sEncoded;
+  sEncoded = Copy(sEncoded, 2, Length(sEncoded)-1);
   string sDecoded = "";
   for (int i=1; i <= Length(sEncoded); i+=3) {
     sDecoded += "\\u0" + Copy(sEncoded, i, 3);
@@ -869,6 +870,10 @@ void GetLink_HLS(string sLink) {
   html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
   HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
   HmsRegExMatch('"(?:hls|file)":"(.*?)"' , html, MediaResourceLink); // Второй вариант
+  if ((MediaResourceLink=="") && HmsRegExMatch('videoFilesEmdedCode[^>]+src=.?"(.*?)"', html, MediaResourceLink)) {
+    GetLink_tvmovies('http:'+HmsJsonDecode(MediaResourceLink));
+    return;
+  }  
   MediaResourceLink = HmsJsonDecode(MediaResourceLink);
   if (LeftCopy(MediaResourceLink, 1)=='[') {
     TStringList QLIST = TStringList.Create();
