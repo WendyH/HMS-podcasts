@@ -1,4 +1,4 @@
-﻿// 2020.02.14
+﻿// 2020.05.21
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -25,6 +25,33 @@ THmsScriptMediaItem GetRoot() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Раскодирование ссылки с сайта bazon.info
+string BazonDecode(string data, string path) {
+  data = HmsBase64Decode(data);
+  string c = Copy(data, 1, 4);
+  string d = Copy(data, 5, Length(data)-4);
+  Variant e[256];
+  int g, f = 0; string h = '';
+  for (int k = 0; k < 256; k++) e[k] = k;
+  for (k=0; k < 256; k++) {
+    f = (f + e[k] + Ord(c[(k % Length(c))+1])) % 256;
+    g = e[k];
+    e[k] = e[f];
+    e[f] = g;
+  }
+  k = 0; f = 0;
+  for (int l = 0; l < Length(d); l++) {
+    k = (k + 1   ) % 256;
+    f = (f + e[k]) % 256;
+    g = e[k];
+    e[k] = e[f];
+    e[f] = g;
+    h += Chr(Ord(d[l+1]) ^ e[(e[k] + e[f]) % 256]);
+  }
+  return HmsUtf8Decode(ReplaceStr(HmsBase64Decode(h), "@", path));
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки на Youtube
 bool GetLink_Youtube33(string sLink) {
   string sData, sVideoID='', sAudio='', sSubtitlesLanguage='ru',
@@ -44,8 +71,8 @@ bool GetLink_Youtube33(string sLink) {
   bool bQualLog   = Pos('--qualitylog', mpPodcastParameters)>0;
   
   if (!HmsRegExMatch('[\\?&]v=([^&]+)'       , sLink, sVideoID))
-  if (!HmsRegExMatch('youtu.be/([^&]+)'      , sLink, sVideoID))
-       HmsRegExMatch('/(?:embed|v)/([^\\?]+)', sLink, sVideoID);
+    if (!HmsRegExMatch('youtu.be/([^&]+)'      , sLink, sVideoID))
+    HmsRegExMatch('/(?:embed|v)/([^\\?]+)', sLink, sVideoID);
   
   if (sVideoID=='') return;
   
@@ -513,6 +540,15 @@ void CreateLinks() {
       VLINKS.LoadFromString(sLink);
       // --------------------------------------------------------------------
       try {
+        if (VLINKS.B['bazon'] && (Pos('--bazon', mpPodcastParameters)>0)) {
+          sLink = VLINKS.S['bazon\\iframe'];
+          sName = Trim('[bazon] '+VLINKS.S['bazon\\translate']+' '+VLINKS.S['bazon\\quality']);
+          Item = CreateMediaItem(PodcastItem, sName, sLink, mpThumbnail, gnDefaultTime);
+          FillVideoInfo(Item);
+        } // if (VLINKS.B['bazon'])
+      } except { }
+      // --------------------------------------------------------------------
+      try {
         if (VLINKS.B['videocdn'] && (Pos('--videocdn', mpPodcastParameters)>0)) {
           sLink = VLINKS.S['videocdn\\iframe'];
           sName = Trim('[videocdn] '+VLINKS.S['videocdn\\translate']+' '+VLINKS.S['videocdn\\quality']);
@@ -787,12 +823,64 @@ string Html5Decode(string sEncoded) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+string CryptoJsAesDecrypt(string pass, string ct, string iv, string salt) {
+  string concatedPassphrase = pass+HmsHexToString(salt);
+  string s1   = HmsHexToString(HmsMD5SumOfString(concatedPassphrase));
+  string s2   = HmsHexToString(HmsMD5SumOfString(s1+concatedPassphrase));
+  string s3   = HmsHexToString(HmsMD5SumOfString(s2+concatedPassphrase));
+  string key  = LeftCopy(s1+s2+s3, 32);
+  string text = HmsCryptCipherDecode("Rijndael", ct, key, HmsHexToString(iv), cmCBCx, "MIME64");
+  text = HmsJsonDecode(Trim(text));
+  HmsRegExMatch('^"(.*?)"$', text, text, 1, PCRE_SINGLELINE);
+  return text;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Расшифровка текста плеера playerjs-alloha-new с allohastream.com
+string AllohaDecode(string sData) {
+  string pre, salt, iv, ct; int i;
+  pre = LeftCopy(sData, 2);
+  if (pre=="#0") {
+    return Html5Decode('#'+Copy(sData, 3, Length(sData)));
+  }
+  if (pre=="#2") {
+    salt = Copy(sData, Length(sData)-15, 16);
+    iv   = Copy(sData, Length(sData)-49, 32);
+    ct   = Copy(sData, 3, Length(sData)-54);
+    return CryptoJsAesDecrypt("3CRH*GjKunrL4#G^v@u2", ct, iv, salt);
+  }
+  if (pre=="#3") {
+    Variant trash = ["//Pio8XnwqfD58fCo+fHx8PnwqXio=","//fD4qPl48Kip8fF48Kip8","//Xj4qfHxePCp8fF4qKnwq","//PF4qKj58fHw+fCpeKio+","//fF5efCo+Kj4+XnxePHw+fHwq"];
+    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
+    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
+    return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
+  }
+  return sData;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Получение ссылки с ресурса allohastream.com
+void GetLink_Allohastream(string sLink, string sHeaders="") {
+  string html, data, sHeight, sQual, sSelectedQual, sTransID, sTrans, sSeasonName; int i, n, iPriority, iMinPriority=99;
+  html = HmsUtf8Decode(HmsDownloadURL(sLink, sHeaders));
+  HmsRegExMatch('Playerjs\\("(.*?)"', html, data);
+  data = AllohaDecode(data);
+  HmsRegExMatch('"file":"(.*?)"', data, MediaResourceLink);
+  MediaResourceLink = AllohaDecode(MediaResourceLink);
+  return;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с ресурса tvmovies
-void GetLink_tvmovies(string sLink) {
+void GetLink_tvmovies(string sLink, string sHeaders="") {
   string html, data, sHeight, sQual, sSelectedQual, sTransID, sTrans, sSeasonName; int i, n, iPriority, iMinPriority=99;
   
-  html = HmsUtf8Decode(HmsDownloadURL('https://hms.lostcut.net/proxy.php?'+sLink));
-    
+  html = HmsUtf8Decode(HmsDownloadURL('https://hms.lostcut.net/proxy.php?'+sLink, sHeaders));
+  if (HmsRegExMatch('Playerjs\\("(.*?)"', html, data)) {
+    if (LeftCopy(data, 1)=='#') data = Html5Decode(data);
+    MediaResourceLink = data;
+    return;
+  }
   // Собираем информацию о переводах
   TStringList TRANS = TStringList.Create();
   TStringList QLIST = TStringList.Create();
@@ -846,7 +934,7 @@ void GetLink_tvmovies(string sLink) {
     }
   }
   if (sSelectedQual!='') MediaResourceLink = ' '+QLIST.Values[sSelectedQual];
-
+  
   bool bQualLog = Pos('--qualitylog', mpPodcastParameters) > 0;
   if (bQualLog) {
     string sMsg = 'Доступное качество: ';
@@ -871,7 +959,15 @@ void GetLink_HLS(string sLink) {
   HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
   HmsRegExMatch('"(?:hls|file)":"(.*?)"' , html, MediaResourceLink); // Второй вариант
   if ((MediaResourceLink=="") && HmsRegExMatch('videoFilesEmdedCode[^>]+src=.?"(.*?)"', html, MediaResourceLink)) {
-    GetLink_tvmovies('http:'+HmsJsonDecode(MediaResourceLink));
+    if (LeftCopy(MediaResourceLink, 4)!='http') MediaResourceLink = 'http:'+Trim(MediaResourceLink);
+    MediaResourceLink = HmsJsonDecode(MediaResourceLink);
+    if (Pos("allohastream", MediaResourceLink)>0)
+      GetLink_Allohastream(MediaResourceLink, "Referer: "+sLink);
+    if (Pos("multikland", MediaResourceLink)>0) {
+      sLink = MediaResourceLink; MediaResourceLink = "";
+      GetLink_HLS(sLink);
+    } else
+      GetLink_tvmovies(MediaResourceLink, "Referer: "+sLink);
     return;
   }  
   MediaResourceLink = HmsJsonDecode(MediaResourceLink);
@@ -964,7 +1060,7 @@ void GetLink_Kodik(string sLink) {
   }
   
   sPost = "d="+d+"&d_sign="+d_sign+"&pd="+pd+"&pd_sign="+pd_sign+"&ref="+HmsHttpEncode(ref)+"&ref_sign="+ref_sign+"&bad_user=false&hash2="+hash2+"&type="+type+"&hash="+hash+"&id="+id;
-  sData = HmsSendRequestEx('kodik.info', '/video-links', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, sPost, 80, 16, sRet, true);
+  sData = HmsSendRequestEx('kodik.cc', '/get-vid', 'POST', 'application/x-www-form-urlencoded; charset=UTF-8', sHeaders, sPost, 80, 16, sRet, true);
   
   JSON = TJsonObject.Create();
   QLIST = TStringList.Create();
@@ -1038,6 +1134,34 @@ void GetLink_Kodik(string sLink) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Javascript Eval
+string jsEval(string sData) {
+  Variant objScript; string sResult = '';
+  
+  try { objScript = CreateOleObject('MSScriptControl.ScriptControl'); } except { };
+  if (VarType(objScript) != varDispatch) { 
+    HmsLogMessage(2, 'Не могу создать ActiveXObject MSScriptControl.ScriptControl'); 
+    return ''; 
+  }
+  objScript.Language = 'JavaScript';
+  try { sResult = objScript.Eval(sData); } except { };
+  return sResult;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Получение ссылки с сайта bazon.site
+void GetLink_Bazon(string sLink) {
+  string html, data, sVal, js, path, unpacked;
+  html = HmsDownloadURL(sLink);
+  if (HmsRegExMatch('<script>eval(\\(.*?\\))</script>', html, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
+  HmsRegExMatch('path:"(.*?)"', data, path);
+  if (HmsRegExMatch("eval(\\(.*?split\\('\\|'\\),0,{}\\)\\))", data, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
+  HmsRegExMatch('file="(.*?)"', data, sVal);
+  MediaResourceLink = BazonDecode(sVal, path);
+  return;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Проверка ссылки на известные нам ресурсы видео и получение ссылки на поток
 void GetLink() {
   if      (Pos('videoframe'   , mpFilePath)>0) GetLink_Videoframe (mpFilePath);
@@ -1047,6 +1171,8 @@ void GetLink() {
   else if (Pos('buildplayer'  , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('farsihd'      , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('kodik'        , mpFilePath)>0) GetLink_Kodik      (mpFilePath);
+  else if (Pos('bazon'        , mpFilePath)>0) GetLink_Bazon      (mpFilePath);
+  else if (Pos('multikland'   , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (HmsRegExMatch('pleer\\w{2}\\.', mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('//vid\\d+'     , mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube33(mpFilePath);

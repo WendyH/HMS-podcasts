@@ -1,4 +1,4 @@
-﻿// 2019.11.12
+﻿// 2020.05.21
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -111,14 +111,27 @@ string NormName(string sName) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Декодирование ссылок для HTML5 плеера
+string Html5Decode(string sEncoded) {
+  if ((sEncoded=="") || (Pos(".", sEncoded) > 0)) return sEncoded;
+  if (sEncoded[1]!="#") return sEncoded;
+  sEncoded = Copy(sEncoded, 2, Length(sEncoded)-1);
+  string sDecoded = "";
+  for (int i=1; i <= Length(sEncoded); i+=3) {
+    sDecoded += "\\u0" + Copy(sEncoded, i, 3);
+  }
+  return HmsJsonDecode(sDecoded);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Создание ссылок на фильм или сериал
 void CreateLinks() {
   string sHtml, sData, sName, sLink, sVal, sTrans, sTransID, sQual, sAdd, sSeasonName, sGrp, sAPI, sImg, sHeaders, sServ; 
-  THmsScriptMediaItem Item; int i, n, nTime; TJsonObject VIDEO, PLAYLIST, VLINKS; TJsonArray SEASONS, EPISODES;
+  THmsScriptMediaItem Item; int i, n, nTime; TJsonObject VIDEO, PLAYLIST, VLINKS, PL; TJsonArray SEASONS, EPISODES;
   VIDEO    = TJsonObject.Create(); TRegExpr RE;
   PLAYLIST = TJsonObject.Create();
   VLINKS   = TJsonObject.Create();
-  
+  PL       = TJsonObject.Create();
   try {
     VIDEO.LoadFromString(FolderItem[mpiJsonInfo]);
     
@@ -149,7 +162,9 @@ void CreateLinks() {
             for (int nTrans=0; nTrans<PLAYLIST.Count; nTrans++) {
               sTransID = PLAYLIST.Names[nTrans];
               sTrans   = TRANS.Values[sTransID]; // Название озвучки
-              SEASONS = PLAYLIST.A[sTransID];
+              sVal =  Html5Decode(PLAYLIST.S[sTransID]);
+              PL.LoadFromString(sVal);
+              SEASONS = PL.AsArray();
               for (i=0; i<SEASONS.Length; i++) {
                 EPISODES = SEASONS[i].A['folder'];
                 if (EPISODES==nil) {
@@ -185,23 +200,19 @@ void CreateLinks() {
         if (VLINKS.B['collaps'] && (Pos('--collaps', mpPodcastParameters)>0)) {
           if (VIDEO.B['isserial']) {
             sHtml = HmsUtf8Decode(HmsDownloadURL(VLINKS.S['collaps\\iframe'], 'Referer: '+mpFilePath));
-            HmsRegExMatch('apiBaseUrl:\\s*[\'"](.*?)[\'"]', sHtml, sAPI);
-            HmsRegExMatch('franchise:\\s*(\\d+)'          , sHtml, sVal);
-            sData = HmsDownloadURL(sAPI+'/season/by-franchise/?id='+sVal+'&host=zombie-film.com-embed');
+            //HmsRegExMatch('MakePlayer\\(({.*?})\\);', sHtml, sData);
+            HmsRegExMatch('playlist:\\s*({.*?}]}]\\s*}),', sHtml, sData);
             PLAYLIST.LoadFromString(sData);
-            SEASONS = PLAYLIST.AsArray;
+            SEASONS = PLAYLIST.O['seasons'].AsArray();
             for (i=0; i<SEASONS.Length; i++) {
-              sVal = SEASONS[i].S['id'];
               sSeasonName = SEASONS[i].S['season']+' сезон';
-              sData = HmsDownloadURL(sAPI+'/video/by-season/?id='+sVal+'&host=zombie-film.com-embed');
-              PLAYLIST.LoadFromString(sData);
-              EPISODES = PLAYLIST.AsArray;
+              EPISODES = SEASONS[i].O['episodes'].AsArray();
               for (n=0; n<EPISODES.Length; n++) {
-                sImg  = EPISODES[n].S['poster\\small'];
+                sImg  = EPISODES[n].S['mini'];
                 nTime = EPISODES[n].I['duration'];
                 sVal  = EPISODES[n].S['episodeName']; if (sVal=='') sVal = 'серия';
                 sName = Format('%.2d %s', [EPISODES[n].I['episode'], sVal]);
-                PLAYLIST = EPISODES[n].O['urlQuality'];
+                PLAYLIST = EPISODES[n].O['hlsList'];
                 for (int q=0; q<PLAYLIST.Count; q++) {
                   sQual = PLAYLIST.Names[q];
                   sLink = PLAYLIST.S[sQual];
@@ -334,16 +345,17 @@ void CreateLinks() {
           HmsRegExMatch('^(.*?//.*?)/', sOriginalLink, sServ);
           if (VIDEO.B['isserial']) {
             sHtml = HmsUtf8Decode(HmsDownloadURL(sOriginalLink, 'Referer: '+mpFilePath, true));
-            RE = TRegExpr.Create('(<div[^>]+item-poster.*?</div>)', PCRE_SINGLELINE);
+            RE = TRegExpr.Create('(<div[^>]+class="item-poster".*?</div>)', PCRE_SINGLELINE);
             if (RE.Search(sHtml)) do {
               sSName = ""; sImg = ""; sLink="";
               HmsRegExMatch('data-poster="(.*?)"', RE.Match, sImg  );
               HmsRegExMatch('data-season="(.*?)"', RE.Match, sSName);
-              HmsRegExMatch('data-hls="(.*?)"'   , RE.Match, sLink );
+              HmsRegExMatch('href="(.*?)"'       , RE.Match, sLink );
+              HmsRegExMatch('title="(.*?)"'      , RE.Match, sName );
               if (sLink=="") continue;
-              sName = NormName(RE.Match(0));
+              sName = NormName(sName);
               sGrp  = 'ONIK\\'+sSName;
-              Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime, sGrp);
+              Item = CreateMediaItem(FolderItem, sName, sServ+sLink, mpThumbnail, gnDefaultTime, sGrp);
             } while (RE.SearchAgain());
             RE.Free;
           } else {
@@ -388,7 +400,7 @@ void CreateLinks() {
       CreateInfoItem('Перевод' , VIDEO.S["translation"]);
     }
     
-  } finally { VIDEO.Free; PLAYLIST.Free; VLINKS.Free; }
+  } finally { VIDEO.Free; PLAYLIST.Free; VLINKS.Free; PL.Free; }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
