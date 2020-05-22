@@ -1,4 +1,4 @@
-﻿// 2020.05.21
+﻿// 2020.05.22
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -549,6 +549,15 @@ void CreateLinks() {
       } except { }
       // --------------------------------------------------------------------
       try {
+        if (VLINKS.B['ustore'] && (Pos('--ustore', mpPodcastParameters)>0)) {
+          sLink = VLINKS.S['ustore\\iframe'];
+          sName = Trim('[ustore] '+VLINKS.S['ustore\\translate']+' '+VLINKS.S['ustore\\quality']);
+          Item = CreateMediaItem(PodcastItem, sName, sLink, mpThumbnail, gnDefaultTime);
+          FillVideoInfo(Item);
+        } // if (VLINKS.B['ustore'])
+      } except { }
+      // --------------------------------------------------------------------
+      try {
         if (VLINKS.B['videocdn'] && (Pos('--videocdn', mpPodcastParameters)>0)) {
           sLink = VLINKS.S['videocdn\\iframe'];
           sName = Trim('[videocdn] '+VLINKS.S['videocdn\\translate']+' '+VLINKS.S['videocdn\\quality']);
@@ -952,10 +961,29 @@ void GetLink_tvmovies(string sLink, string sHeaders="") {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Декодирование ссылок с ресурса ustore.bz (u-cdn.top)
+string UstoreDecode(string data) {
+  if (data=="") return "";
+  if (data[1]=="=") {
+    data = Copy(data, 2, Length(data)-1);
+    string s1 = "qwertyuiopxcvQWERTYUIOPXCV123456789";
+    string s2 = "ASDFGHJKLZBNMasdfghjklzbnm987654321";
+    for (int i=1; i <= Length(s1); i++) {
+      data = ReplaceStr(data, s1[i],  "__");
+      data = ReplaceStr(data, s2[i], s1[i]);
+      data = ReplaceStr(data,  "__", s2[i]);
+    }
+    data = HmsHttpDecode(HmsBase64Decode(data));
+  }
+  return data;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с ресурса buildplayer
 void GetLink_HLS(string sLink) {
-  string sQual, sSelectedQual, html;
-  html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
+  string sQual, sSelectedQual, html, js, data, sVal, path, sServ, hash, id;
+  HmsRegExMatch("^(http.*?//[^/]+)", sLink, sServ);
+  html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath+'\r\nOrigin: '+sServ));
   HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
   HmsRegExMatch('"(?:hls|file)":"(.*?)"' , html, MediaResourceLink); // Второй вариант
   if ((MediaResourceLink=="") && HmsRegExMatch('videoFilesEmdedCode[^>]+src=.?"(.*?)"', html, MediaResourceLink)) {
@@ -971,6 +999,27 @@ void GetLink_HLS(string sLink) {
     return;
   }  
   MediaResourceLink = HmsJsonDecode(MediaResourceLink);
+  if ((MediaResourceLink=="") && (Pos("bazon", sLink)>0)) {
+    if (html!='') {
+      if (HmsRegExMatch('<script>eval(\\(.*?\\))</script>', html, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
+      HmsRegExMatch('path:"(.*?)"', data, path);
+      if (HmsRegExMatch("eval(\\(.*?split\\('\\|'\\),0,{}\\)\\))", data, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
+      HmsRegExMatch('file="(.*?)";', data, sVal);
+      sVal = ReplaceStr(sVal, '"+"', "");
+      MediaResourceLink = BazonDecode(sVal, path);
+    } else {
+      MediaResourceLink = sLink;
+    }
+  }
+  if ((MediaResourceLink=="") && HmsRegExMatch("u-(cdn|play|\\w+)\\.", sLink, '')) {
+    HmsRegExMatch('"hash"\\s*:\\s*"(.*?)"', html , hash);
+    HmsRegExMatch('.*/(.*)'               , sLink, id  );
+    HmsRegExMatch(  '"id"\\s*:\\s*"(.*?)"', html , id  );
+    data = HmsUtf8Decode(HmsDownloadURL("https://ustore.bz/getContentJson.php?hash="+hash+"&id="+id, 'Referer: '+mpFilePath+'\r\nOrigin: '+sServ));
+    HmsRegExMatch('"url"\\s*:\\s*\\[[^\\]]*"(.*?)"', data, sVal, 1, PCRE_SINGLELINE);
+    MediaResourceLink = UstoreDecode(sVal);
+    HmsRegExMatch('^(.*?\\.mp4):hls:manifest.m3u8', MediaResourceLink, MediaResourceLink);
+  }
   if (LeftCopy(MediaResourceLink, 1)=='[') {
     TStringList QLIST = TStringList.Create();
     int n = WordCount(MediaResourceLink, ',');
@@ -998,6 +1047,11 @@ void GetLink_HLS(string sLink) {
     }
     MediaResourceLink = QLIST.Values[sSelectedQual];
     QLIST.Free();
+  }
+  if (Pos("bazon", MediaResourceLink)>0) {
+    if (Trim(mpComment)!='') mpFilePath = mpComment;
+    MediaResourceLink = '-headers "Referer: '+mpFilePath+'" -user_agent "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36" -i "'+Trim(MediaResourceLink)+'"';
+    return;
   }
   if (LeftCopy(MediaResourceLink, 1)=='/') MediaResourceLink = HmsExpandLink(MediaResourceLink, 'http:');
 }
@@ -1149,19 +1203,6 @@ string jsEval(string sData) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Получение ссылки с сайта bazon.site
-void GetLink_Bazon(string sLink) {
-  string html, data, sVal, js, path, unpacked;
-  html = HmsDownloadURL(sLink);
-  if (HmsRegExMatch('<script>eval(\\(.*?\\))</script>', html, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
-  HmsRegExMatch('path:"(.*?)"', data, path);
-  if (HmsRegExMatch("eval(\\(.*?split\\('\\|'\\),0,{}\\)\\))", data, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
-  HmsRegExMatch('file="(.*?)"', data, sVal);
-  MediaResourceLink = BazonDecode(sVal, path);
-  return;
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // Проверка ссылки на известные нам ресурсы видео и получение ссылки на поток
 void GetLink() {
   if      (Pos('videoframe'   , mpFilePath)>0) GetLink_Videoframe (mpFilePath);
@@ -1171,7 +1212,7 @@ void GetLink() {
   else if (Pos('buildplayer'  , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('farsihd'      , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('kodik'        , mpFilePath)>0) GetLink_Kodik      (mpFilePath);
-  else if (Pos('bazon'        , mpFilePath)>0) GetLink_Bazon      (mpFilePath);
+  else if (Pos('bazon'        , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (Pos('multikland'   , mpFilePath)>0) GetLink_HLS        (mpFilePath);
   else if (HmsRegExMatch('pleer\\w{2}\\.', mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('//vid\\d+'     , mpFilePath, '')) GetLink_HLS(mpFilePath);

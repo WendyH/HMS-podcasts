@@ -1,4 +1,4 @@
-﻿// 2020.05.21
+﻿// 2020.05.22
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -124,10 +124,139 @@ string Html5Decode(string sEncoded) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Параметры:
+// 1) Folder - Папка, где будут создаватся влоденные папки и элементы
+// 2) sLink  - ссылка на файл плейлиста или сами данные JSON плейлиста
+// 3) sName  - Имя подпапки, которую необходимо создать. Необязательный параметр.
+// ---- Создание серий из плейлиста -------------------------------------------
+void CreateSeriesFromPlaylist(THmsScriptMediaItem Folder, string sLink, string sName='') {
+  string sData, s1, s2, s3, sUrl, sQual; int i; TJsonObject JSON, PLITEM; TJsonArray PLAYLIST; // Объявляем переменные
+  
+  // Если передано имя плейлиста, то создаём папку, в которой будем создавать элементы
+  if (Trim(sName)!='') Folder = Folder.AddFolder(sName);
+  
+  // Если в переменной sLink сожержится знак '{', то там не ссылка, а сами данные Json
+  if (Pos('{', sLink)>0) {
+    sData = sLink;
+  } else {
+    sData = HmsDownloadURL(sLink, "Referer: "+mpFilePath, true);  // Загружаем плейлист
+  }
+  
+  JSON  = TJsonObject.Create();                 // Создаём объект для работы с Json
+  try {
+    JSON.LoadFromString(sData);                 // Загружаем json данные в объект
+    PLAYLIST = JSON.A['folder'];                // Пытаемся получить array с именем 'folder'
+    if (PLAYLIST==nil) PLAYLIST = JSON.AsArray; // Если массив 'folder' получить не получилось, то представляем все наши данные как массив
+    if (PLAYLIST!=nil) {                        // Если получили массив, то запускаем обход всех элементов в цикле
+      for (i=0; i<PLAYLIST.Length; i++) {
+        PLITEM = PLAYLIST[i];                   // Получаем текущий элемент массива
+        sName = PLITEM.S['title'];              // Название - значение поля comment
+        sLink = PLITEM.S['file' ];              // Получаем значение ссылки на файл
+        
+        // Форматируем числовое представление серий в названии
+        // Если в названии есть число, то будет в s1 - то, что стояло перед ним, s2 - само число, s3 - то, что было после числа
+        if (HmsRegExMatch3('^(.*?)(\\d+)(.*)$', sName, s1, s2, s3))
+          sName = Format('%s %.2d %s', [s1, StrToInt(s2), s3]); // Форматируем имя - делаем число двухцифровое (01, 02...)
+        
+        // Проверяем, если это вложенный плейлист - запускаем создание элементов из этого плейлиста рекурсивно
+        if (PLITEM.B['folder'])
+          CreateSeriesFromPlaylist(Folder, PLITEM.S['folder'], sName);
+        else {
+          for (int n=1; n <= WordCount(sLink, ','); n++) {
+            sUrl = ExtractWord(n, sLink, ','); sQual = "";
+            HmsRegExMatch2('\\[(\\d+\\w+)\\](.*)', sUrl, sQual, sUrl);
+            THmsScriptMediaItem Item = CreateMediaItem(Folder, sName, sUrl, mpThumbnail, gnDefaultTime, sQual); // Иначе просто создаём ссылки на видео
+            Item[mpiComment] = mpFilePath; // Для bazon, запоминаем для Referer
+          }
+        }
+      }
+    } // end if (PLAYLIST!=nil)
+    
+  } finally { JSON.Free; }                      // Какие бы ошибки не случились, освобождаем объект из памяти
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Javascript Eval
+string jsEval(string sData) {
+  Variant objScript; string sResult = '';
+  try { objScript = CreateOleObject('MSScriptControl.ScriptControl'); } except { };
+  if (VarType(objScript) != varDispatch) { 
+    HmsLogMessage(2, 'Не могу создать ActiveXObject MSScriptControl.ScriptControl'); 
+    return ''; 
+  }
+  objScript.Language = 'JavaScript';
+  try { sResult = objScript.Eval(sData); } except { };
+  return sResult;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+string CryptoJsAesDecrypt(string pass, string ct, string iv, string salt) {
+  string concatedPassphrase = pass+HmsHexToString(salt);
+  string s1   = HmsHexToString(HmsMD5SumOfString(concatedPassphrase));
+  string s2   = HmsHexToString(HmsMD5SumOfString(s1+concatedPassphrase));
+  string s3   = HmsHexToString(HmsMD5SumOfString(s2+concatedPassphrase));
+  string key  = LeftCopy(s1+s2+s3, 32);
+  string text = HmsCryptCipherDecode("Rijndael", ct, key, HmsHexToString(iv), cmCBCx, "MIME64");
+  text = HmsJsonDecode(Trim(text));
+  HmsRegExMatch('^"(.*?)"$', text, text, 1, PCRE_SINGLELINE);
+  return text;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Расшифровка текста плеера playerjs-alloha-new с allohastream.com
+string AllohaDecode(string sData) {
+  string pre, salt, iv, ct; int i;
+  pre = LeftCopy(sData, 2);
+  if (pre=="#0") {
+    return Html5Decode('#'+Copy(sData, 3, Length(sData)));
+  }
+  if (pre=="#2") {
+    salt = Copy(sData, Length(sData)-15, 16);
+    iv   = Copy(sData, Length(sData)-49, 32);
+    ct   = Copy(sData, 3, Length(sData)-54);
+    return CryptoJsAesDecrypt("3CRH*GjKunrL4#G^v@u2", ct, iv, salt);
+  }
+  if (pre=="#3") {
+    Variant trash = ["//Pio8XnwqfD58fCo+fHx8PnwqXio=","//fD4qPl48Kip8fF48Kip8","//Xj4qfHxePCp8fF4qKnwq","//PF4qKj58fHw+fCpeKio+","//fF5efCo+Kj4+XnxePHw+fHwq"];
+    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
+    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
+      return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
+  }
+  return sData;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Раскодирование ссылки с сайта bazon.info
+string BazonDecode(string data, string path) {
+  data = HmsBase64Decode(data);
+  string c = Copy(data, 1, 4);
+  string d = Copy(data, 5, Length(data)-4);
+  Variant e[256];
+  int g, f = 0; string h = '';
+  for (int k = 0; k < 256; k++) e[k] = k;
+  for (k=0; k < 256; k++) {
+    f = (f + e[k] + Ord(c[(k % Length(c))+1])) % 256;
+    g = e[k];
+    e[k] = e[f];
+    e[f] = g;
+  }
+  k = 0; f = 0;
+  for (int l = 0; l < Length(d); l++) {
+    k = (k + 1   ) % 256;
+    f = (f + e[k]) % 256;
+    g = e[k];
+    e[k] = e[f];
+    e[f] = g;
+    h += Chr(Ord(d[l+1]) ^ e[(e[k] + e[f]) % 256]);
+  }
+  return HmsUtf8Decode(ReplaceStr(HmsBase64Decode(h), "@", path));
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Создание ссылок на фильм или сериал
 void CreateLinks() {
-  string sHtml, sData, sName, sLink, sVal, sTrans, sTransID, sQual, sAdd, sSeasonName, sGrp, sAPI, sImg, sHeaders, sServ; 
-  THmsScriptMediaItem Item; int i, n, nTime; TJsonObject VIDEO, PLAYLIST, VLINKS, PL; TJsonArray SEASONS, EPISODES;
+  string sHtml, sData, sName, sLink, sVal, sTrans, sTransID, sQual, sAdd, sSeasonName, sGrp, sAPI, sImg, sHeaders, sServ, js, path, hash, id;
+  THmsScriptMediaItem Item; int i, n, nTime; TJsonObject VIDEO, PLAYLIST, VLINKS, PL, SEASON, TRANSLATION; TJsonArray SEASONS, EPISODES;
   VIDEO    = TJsonObject.Create(); TRegExpr RE;
   PLAYLIST = TJsonObject.Create();
   VLINKS   = TJsonObject.Create();
@@ -142,6 +271,96 @@ void CreateLinks() {
     
     try {
       VLINKS.LoadFromString(sLink);
+      // --------------------------------------------------------------------
+      try {
+        if (VLINKS.B['bazon'] && (Pos('--bazon', mpPodcastParameters)>0)) {
+          sLink = VLINKS.S['bazon\\iframe'];
+          HmsRegExMatch("^(http.*?//[^/]+)", sLink, sServ);
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsDownloadURL(sLink, 'Referer: '+sLink+'\r\nOrigin: '+sServ);
+            if (HmsRegExMatch('<script>eval(\\(.*?\\))</script>', sHtml, js, 1, PCRE_SINGLELINE)) sData = jsEval(js);
+            HmsRegExMatch('path:"(.*?)"', sData, path);
+            if (HmsRegExMatch("eval(\\(.*?split\\('\\|'\\),0,{}\\)\\))", sData, js, 1, PCRE_SINGLELINE)) sData = jsEval(js);
+            HmsRegExMatch('file="(.*?)";', sData, sVal);
+            sVal = BazonDecode(ReplaceStr(sVal, '"+"', ""), path);
+            mpFilePath = sLink;
+            CreateSeriesFromPlaylist(FolderItem, sVal, 'bazon');
+          } else {
+            sName = Trim('[bazon] '+VLINKS.S['bazon\\translate']+' '+VLINKS.S['bazon\\quality']);
+            Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+        } // if (VLINKS.B['bazon'])
+      } except { }
+      // --------------------------------------------------------------------
+      try {
+        if (VLINKS.B['ustore'] && (Pos('--ustore', mpPodcastParameters)>0)) {
+          sLink = VLINKS.S['ustore\\iframe'];
+          HmsRegExMatch("^(http.*?//[^/]+)", sLink, sServ);
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath+'\r\nOrigin: '+sServ));
+            HmsRegExMatch('"hash"\\s*:\\s*"(.*?)"', sHtml, hash);
+            HmsRegExMatch('"playlist":(.*?\\])\\s*\\}', sHtml, sData, 1, PCRE_SINGLELINE);
+            HmsRegExMatch('(^.*/)', sLink, sLink);
+            PLAYLIST.LoadFromString(sData);
+            for (i=0; i < PLAYLIST.AsArray.Length; i++) {
+              PL = PLAYLIST.AsArray[i];
+              sTrans = PL.S['translate']; sTrans = Trim(ReplaceStr(sTrans, 'Не требуется', ''));
+              PL = PL.O['data'];
+              for (n=0; n < PL.Count; n++) {
+                mpSeriesSeasonNo = PL.Names[n];
+                sGrp = 'ustore '+Trim('Сезон '+mpSeriesSeasonNo+' '+sTrans);
+                SEASON = PL.O[PL.Names[n]];
+                for (int q=0; q < SEASON.Count ; q++) {
+                  mpSeriesEpisodeNo = SEASON.Names[q];
+                  id = SEASON.S[mpSeriesEpisodeNo];
+                  Item = CreateMediaItem(FolderItem, Format('%.2d cерия', [StrToInt(mpSeriesEpisodeNo)]), sLink+id, mpThumbnail, gnDefaultTime, sGrp);
+                  Item.ItemParent[mpiFolderSortOrder] = 'mpTitle';
+                  Item.ItemParent.Sort('+mpTitle');
+                }
+              }
+            }
+          } else {
+            sName = Trim('[ustore] '+VLINKS.S['ustore\\translate']+' '+VLINKS.S['ustore\\quality']);
+            Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }            
+        } // if (VLINKS.B['ustore'])
+      } except { }
+      // --------------------------------------------------------------------
+      try {
+        if (VLINKS.B['alloha'] && (Pos('--alloha', mpPodcastParameters)>0)) {
+          sLink = VLINKS.S['alloha\\iframe'];
+          HmsRegExMatch("^(http.*?//[^/]+)", sLink, sServ);
+          if (VIDEO.B['isserial']) {
+            sHtml = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath));
+            HmsRegExMatch("serial\\s*=\\s*'(.*?)'", sHtml, sVal, 1, PCRE_SINGLELINE);
+            PLAYLIST.LoadFromString(sVal);
+            for (i=0; i < PLAYLIST.Count; i++) {
+              SEASON = PLAYLIST.O[PLAYLIST.Names[i]];
+              for (n=0; n < SEASON.Count; n++) {
+                mpSeriesEpisodeNo = SEASON.Names[n];
+                PL = SEASON.O[SEASON.Names[n]];
+                for (int w=0; w < PL.Count; w++) {
+                  TRANSLATION = PL.O[PL.Names[w]];
+                  sVal   = TRANSLATION.S['player'];
+                  sData  = AllohaDecode(sVal);
+                  HmsRegExMatch('"file":"(.*?)"', sData, sVal);
+                  sLink  = AllohaDecode(sVal);
+                  sGrp = Trim('alloha Сезон '+PLAYLIST.Names[i]+' '+ReplaceStr(TRANSLATION.S['translation'], 'Не требуется', ''));
+                  Item = CreateMediaItem(FolderItem, Format('%.2d cерия', [StrToInt(mpSeriesEpisodeNo)]), sLink, mpThumbnail, gnDefaultTime, sGrp);
+                  Item.ItemParent[mpiFolderSortOrder] = 'mpTitle';
+                  Item.ItemParent.Sort('+mpTitle');
+                }
+              }
+            }
+          } else {
+            sName = Trim('[alloha] '+VLINKS.S['alloha\\translate']+' '+VLINKS.S['alloha\\quality']);
+            Item = CreateMediaItem(FolderItem, sName, sLink, mpThumbnail, gnDefaultTime);
+            FillVideoInfo(Item);
+          }
+        } // if (VLINKS.B['alloha'])
+      } except { }
       // --------------------------------------------------------------------
       try {
         if (VLINKS.B['videocdn'] && (Pos('--videocdn', mpPodcastParameters)>0)) {
@@ -213,7 +432,7 @@ void CreateLinks() {
                 sVal  = EPISODES[n].S['episodeName']; if (sVal=='') sVal = 'серия';
                 sName = Format('%.2d %s', [EPISODES[n].I['episode'], sVal]);
                 PLAYLIST = EPISODES[n].O['hlsList'];
-                for (int q=0; q<PLAYLIST.Count; q++) {
+                for (q=0; q<PLAYLIST.Count; q++) {
                   sQual = PLAYLIST.Names[q];
                   sLink = PLAYLIST.S[sQual];
                   sGrp = 'Collaps '+sQual+'\\'+sSeasonName;
@@ -313,7 +532,7 @@ void CreateLinks() {
               sTrans = 'kodik '+VLINKS.S['kodik\\translate']+' '+VLINKS.S['kodik\\quality'];
               for (i=0; i < PLAYLIST.O['seasons'].Count; i++) {
                 sSName = PLAYLIST.O['seasons'].Names[i];
-                TJsonObject SEASON = PLAYLIST.O['seasons\\'+sSName];
+                SEASON = PLAYLIST.O['seasons\\'+sSName];
                 if ((PLAYLIST.O['seasons'].Count>1) || (!PLAYLIST.B['seasons\\1\\episodes']) || (PLAYLIST.O['seasons\\1\\episodes'].Count>15)) {
                   sGrp = sTrans+'\\'+Format('%.2d сезон', [StrToInt(sSName)]);
                 }
