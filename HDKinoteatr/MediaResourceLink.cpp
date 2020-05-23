@@ -997,7 +997,7 @@ string AllohaDecode(string sData) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки с ресурса allohastream.com
-void GetLink_Allohastream(string sLink, string sHeaders="") {
+void GetLink_Allohastream(string sLink, string sHeaders="Referer: http://www.hdkinoteatr.com/") {
   string html, data, sHeight, sQual, sSelectedQual, sTransID, sTrans, sSeasonName; int i, n, iPriority, iMinPriority=99;
   html = HmsUtf8Decode(HmsDownloadURL(sLink, sHeaders));
   HmsRegExMatch('Playerjs\\("(.*?)"', html, data);
@@ -1333,15 +1333,16 @@ string jsEval(string sData) {
 ///////////////////////////////////////////////////////////////////////////////
 // Проверка ссылки на известные нам ресурсы видео и получение ссылки на поток
 void GetLink() {
-  if      (Pos('videoframe'   , mpFilePath)>0) GetLink_Videoframe (mpFilePath);
-  else if (Pos('tvmovies.in'  , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
-  else if (Pos('cdn.tv'       , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
-  else if (Pos('videocdn'     , mpFilePath)>0) GetLink_tvmovies   (mpFilePath);
-  else if (Pos('buildplayer'  , mpFilePath)>0) GetLink_HLS        (mpFilePath);
-  else if (Pos('farsihd'      , mpFilePath)>0) GetLink_HLS        (mpFilePath);
-  else if (Pos('kodik'        , mpFilePath)>0) GetLink_Kodik      (mpFilePath);
-  else if (Pos('bazon'        , mpFilePath)>0) GetLink_HLS        (mpFilePath);
-  else if (Pos('multikland'   , mpFilePath)>0) GetLink_HLS        (mpFilePath);
+  if      (Pos('videoframe'   , mpFilePath)>0) GetLink_Videoframe  (mpFilePath);
+  else if (Pos("alloha"       , mpFilePath)>0) GetLink_Allohastream(mpFilePath);
+  else if (Pos('tvmovies.in'  , mpFilePath)>0) GetLink_tvmovies    (mpFilePath);
+  else if (Pos('cdn.tv'       , mpFilePath)>0) GetLink_tvmovies    (mpFilePath);
+  else if (Pos('videocdn'     , mpFilePath)>0) GetLink_tvmovies    (mpFilePath);
+  else if (Pos('buildplayer'  , mpFilePath)>0) GetLink_HLS         (mpFilePath);
+  else if (Pos('farsihd'      , mpFilePath)>0) GetLink_HLS         (mpFilePath);
+  else if (Pos('kodik'        , mpFilePath)>0) GetLink_Kodik       (mpFilePath);
+  else if (Pos('bazon'        , mpFilePath)>0) GetLink_HLS         (mpFilePath);
+  else if (Pos('multikland'   , mpFilePath)>0) GetLink_HLS         (mpFilePath);
   else if (HmsRegExMatch('pleer\\w{2}\\.', mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('//vid\\d+'     , mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube33(mpFilePath);
