@@ -1,4 +1,4 @@
-﻿// 2020.05.22
+﻿// 2020.05.23
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -261,8 +261,13 @@ void CreateLinks() {
   PLAYLIST = TJsonObject.Create();
   VLINKS   = TJsonObject.Create();
   PL       = TJsonObject.Create();
+  if ((Trim(FolderItem[mpiJsonInfo])=="") && HmsRegExMatch('.*/(\\d+)-', mpFilePath, id)) {
+    FolderItem[mpiJsonInfo] = HmsUtf8Decode(HmsDownloadURL(gsAPIUrl+"videos?id="+sVal));
+    HmsRegExMatch("^\\[(.*)\\]$", FolderItem[mpiJsonInfo], FolderItem[mpiJsonInfo]);
+  }
   try {
     VIDEO.LoadFromString(FolderItem[mpiJsonInfo]);
+    if ((mpThumbnail=="") && (VIDEO.I['kpid']!=0)) mpThumbnail = "https://st.kp.yandex.net/images/film_iphone/iphone360_"+VIDEO.S['kpid']+".jpg";
     
     gStart = ConvertToDate(VIDEO.S['date']); // Устанавливаем начальную точку для даты ссылок
     gnDefaultTime = VIDEO.I['time'];
