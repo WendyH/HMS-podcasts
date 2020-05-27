@@ -1,4 +1,4 @@
-﻿// 2020.05.23
+﻿// 2020.05.27
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -27,7 +27,12 @@ THmsScriptMediaItem GetRoot() {
 ///////////////////////////////////////////////////////////////////////////////
 // Раскодирование ссылки с сайта bazon.info
 string BazonDecode(string data, string path) {
-  data = HmsBase64Decode(data);
+  if (ProgramVersion >= "3.0") {
+    string s = 'decodeBase64=function(f){var g={},b=65,d=0,a,c=0,h,e="",k=String.fromCharCode,l=f.length;for(a="";91>b;)a+=k(b++);a+=a.toLowerCase()+"0123456789+/";for(b=0;64>b;b++)g[a.charAt(b)]=b;for(a=0;a<l;a++)for(b=g[f.charAt(a)],d=(d<<6)+b,c+=6;8<=c;)((h=d>>>(c-=8)&255)||a<l-2)&&(e+=k(h));return e};';
+    data = jsEval(s+";(decodeBase64('"+data+"'))");
+  } else {
+    data = HmsBase64Decode(data);
+  }
   string c = Copy(data, 1, 4);
   string d = Copy(data, 5, Length(data)-4);
   Variant e[256];
