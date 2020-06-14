@@ -1,4 +1,4 @@
-﻿// 2020.05.23
+﻿// 2020.06.14
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -206,20 +206,20 @@ string CryptoJsAesDecrypt(string pass, string ct, string iv, string salt) {
 // Расшифровка текста плеера playerjs-alloha-new с allohastream.com
 string AllohaDecode(string sData) {
   string pre, salt, iv, ct; int i;
-  pre = LeftCopy(sData, 2);
-  if (pre=="#0") {
+  Variant trash = ["##OyE/XuKElj4qfHxePCrihJZ8fF4qKnzihJYq","##Pzs+KSEoKjxefCp8Pj98KHwqPnx8fl1bfD58Kl4q","##fFs+KuKElj5eP1s8KirihJZdfHxePCoqfA==","##P3w7Xl58Kj4qPj8/Ij5efF48fD58PyEq4oSWKHw=","##PGBeKmAqPnzihJY/Wyo7fHw+fCrihJY7Xipg4oSWKj4="];
+  for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
+  for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
+    pre = LeftCopy(sData, 2);
+  if (pre=="#5") {
     return Html5Decode('#'+Copy(sData, 3, Length(sData)));
   }
-  if (pre=="#2") {
+  if (pre=="#8") {
     salt = Copy(sData, Length(sData)-15, 16);
     iv   = Copy(sData, Length(sData)-49, 32);
     ct   = Copy(sData, 3, Length(sData)-54);
-    return CryptoJsAesDecrypt("3CRH*GjKunrL4#G^v@u2", ct, iv, salt);
+    return CryptoJsAesDecrypt("t4^h2#oumt0L2IQKjl%1b1@lpN%tm!rW5BSSAGoh2E#P1pZCpF", ct, iv, salt);
   }
-  if (pre=="#3") {
-    Variant trash = ["//Pio8XnwqfD58fCo+fHx8PnwqXio=","//fD4qPl48Kip8fF48Kip8","//Xj4qfHxePCp8fF4qKnwq","//PF4qKj58fHw+fCpeKio+","//fF5efCo+Kj4+XnxePHw+fHwq"];
-    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
-    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
+  if (pre=="#0") {
       return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
   }
   return sData;
@@ -228,7 +228,12 @@ string AllohaDecode(string sData) {
 ///////////////////////////////////////////////////////////////////////////////
 // Раскодирование ссылки с сайта bazon.info
 string BazonDecode(string data, string path) {
-  data = HmsBase64Decode(data);
+  if (ProgramVersion >= "3.0") {
+    string s = 'decodeBase64=function(f){var g={},b=65,d=0,a,c=0,h,e="",k=String.fromCharCode,l=f.length;for(a="";91>b;)a+=k(b++);a+=a.toLowerCase()+"0123456789+/";for(b=0;64>b;b++)g[a.charAt(b)]=b;for(a=0;a<l;a++)for(b=g[f.charAt(a)],d=(d<<6)+b,c+=6;8<=c;)((h=d>>>(c-=8)&255)||a<l-2)&&(e+=k(h));return e};';
+    data = jsEval(s+";(decodeBase64('"+data+"'))");
+  } else {
+    data = HmsBase64Decode(data);
+  }
   string c = Copy(data, 1, 4);
   string d = Copy(data, 5, Length(data)-4);
   Variant e[256];

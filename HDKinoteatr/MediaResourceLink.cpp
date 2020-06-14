@@ -1,4 +1,4 @@
-﻿// 2020.05.27
+﻿// 2020.06.14
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -981,21 +981,21 @@ string CryptoJsAesDecrypt(string pass, string ct, string iv, string salt) {
 // Расшифровка текста плеера playerjs-alloha-new с allohastream.com
 string AllohaDecode(string sData) {
   string pre, salt, iv, ct; int i;
-  pre = LeftCopy(sData, 2);
-  if (pre=="#0") {
+  Variant trash = ["##OyE/XuKElj4qfHxePCrihJZ8fF4qKnzihJYq","##Pzs+KSEoKjxefCp8Pj98KHwqPnx8fl1bfD58Kl4q","##fFs+KuKElj5eP1s8KirihJZdfHxePCoqfA==","##P3w7Xl58Kj4qPj8/Ij5efF48fD58PyEq4oSWKHw=","##PGBeKmAqPnzihJY/Wyo7fHw+fCrihJY7Xipg4oSWKj4="];
+  for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
+  for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
+    pre = LeftCopy(sData, 2);
+  if (pre=="#5") {
     return Html5Decode('#'+Copy(sData, 3, Length(sData)));
   }
-  if (pre=="#2") {
+  if (pre=="#8") {
     salt = Copy(sData, Length(sData)-15, 16);
     iv   = Copy(sData, Length(sData)-49, 32);
     ct   = Copy(sData, 3, Length(sData)-54);
-    return CryptoJsAesDecrypt("3CRH*GjKunrL4#G^v@u2", ct, iv, salt);
+    return CryptoJsAesDecrypt("t4^h2#oumt0L2IQKjl%1b1@lpN%tm!rW5BSSAGoh2E#P1pZCpF", ct, iv, salt);
   }
-  if (pre=="#3") {
-    Variant trash = ["//Pio8XnwqfD58fCo+fHx8PnwqXio=","//fD4qPl48Kip8fF48Kip8","//Xj4qfHxePCp8fF4qKnwq","//PF4qKj58fHw+fCpeKio+","//fF5efCo+Kj4+XnxePHw+fHwq"];
-    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
-    for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
-    return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
+  if (pre=="#0") {
+      return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
   }
   return sData;
 }
@@ -1099,8 +1099,8 @@ string UstoreDecode(string data) {
   if (data=="") return "";
   if (data[1]=="=") {
     data = Copy(data, 2, Length(data)-1);
-    string s1 = "qwertyuiopxcvQWERTYUIOPXCV123456789";
-    string s2 = "ASDFGHJKLZBNMasdfghjklzbnm987654321";
+    string s1 = "poiuytrewqPOIUYTREWQ09876";
+    string s2 = "lkjhgfdsazLKJHGFDSAZ54321";
     for (int i=1; i <= Length(s1); i++) {
       data = ReplaceStr(data, s1[i],  "__");
       data = ReplaceStr(data, s2[i], s1[i]);
