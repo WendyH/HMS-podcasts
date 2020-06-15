@@ -1099,8 +1099,8 @@ string UstoreDecode(string data) {
   if (data=="") return "";
   if (data[1]=="=") {
     data = Copy(data, 2, Length(data)-1);
-    string s1 = "poiuytrewqPOIUYTREWQ09876";
-    string s2 = "lkjhgfdsazLKJHGFDSAZ54321";
+    string s1 = "zcbmxvnZCBMXVN01234";
+    string s2 = "qawsedrQAWSEDR98765";
     for (int i=1; i <= Length(s1); i++) {
       data = ReplaceStr(data, s1[i],  "__");
       data = ReplaceStr(data, s2[i], s1[i]);
