@@ -1131,7 +1131,9 @@ string UstoreDecode(string data) {
       data = ReplaceStr(data, s2[i], s1[i]);
       data = ReplaceStr(data,  "__", s2[i]);
     }
-    data = HmsPercentDecode(HmsBase64Decode(data));
+    data = HmsBase64Decode(data);
+    HmsRegExMatch('^(.*%....)', data, data);
+    data = HmsPercentDecode(data);
     string decoded="", digits="0123456789abcdefghijklmnopqrstuvwxyz"; // base36 decode
     for (i=1; i < Length(data); i+=2) {
       if (data[i]!="!") break; i++;
