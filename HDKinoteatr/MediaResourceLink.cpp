@@ -1,4 +1,4 @@
-﻿// 2020.06.14
+﻿// 2020.06.21
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -953,6 +953,23 @@ void CreateLinks() {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Декодирование ссылок для HTML5 плеера
+string hd0_decode(string data) {
+  if ((data=="") || (Pos(".", data) > 0)) return data;
+  if (ProgramVersion >= "3.0") {
+    string s = 'decodeBase64=function(f){var g={},b=65,d=0,a,c=0,h,e="",k=String.fromCharCode,l=f.length;for(a="";91>b;)a+=k(b++);a+=a.toLowerCase()+"0123456789+/";for(b=0;64>b;b++)g[a.charAt(b)]=b;for(a=0;a<l;a++)for(b=g[f.charAt(a)],d=(d<<6)+b,c+=6;8<=c;)((h=d>>>(c-=8)&255)||a<l-2)&&(e+=k(h));return e};';
+    data = jsEval(s+";(decodeBase64('"+data+"'))");
+  } else {
+    data = HmsBase64Decode(data);
+  }
+  string ch, sDecoded = "";
+  for (int i=1; i <= Length(data); i++) {
+    sDecoded += "\\u00" + HmsStringToHex(Copy(data, i, 1));
+  }
+  return HmsJsonDecode(sDecoded);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Декодирование ссылок для HTML5 плеера
 string Html5Decode(string sEncoded) {
   if ((sEncoded=="") || (Pos(".", sEncoded) > 0)) return sEncoded;
   if (sEncoded[1]!="#") return sEncoded;
@@ -981,18 +998,18 @@ string CryptoJsAesDecrypt(string pass, string ct, string iv, string salt) {
 // Расшифровка текста плеера playerjs-alloha-new с allohastream.com
 string AllohaDecode(string sData) {
   string pre, salt, iv, ct; int i;
-  Variant trash = ["##OyE/XuKElj4qfHxePCrihJZ8fF4qKnzihJYq","##Pzs+KSEoKjxefCp8Pj98KHwqPnx8fl1bfD58Kl4q","##fFs+KuKElj5eP1s8KirihJZdfHxePCoqfA==","##P3w7Xl58Kj4qPj8/Ij5efF48fD58PyEq4oSWKHw=","##PGBeKmAqPnzihJY/Wyo7fHw+fCrihJY7Xipg4oSWKj4="];
+  Variant trash = ["##P3w7Xl58Kj4qPj8/Pl58Xjx8Pnw/ISrihJYofDshP17ihJY+", "##Pzs+KSEoKjt8fD58KjxefCp8XipgPj98KHwqPnx8fl1bfD58Kl4q", "##PGBeKmAqPnzihJYqKuKEll0/Wyo7fHw+fCrihJY7Xipg4oSWKj4=", "##fFs+KuKElj5eP1s7fHw+fCo8KirihJZdfHxePCoqfA==", "##OyE/XuKElj4qXipgfHxePCrihJZ8fF4qYF4qKnzihJYqfl1bfD58"];
   for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
   for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
-    pre = LeftCopy(sData, 2);
-  if (pre=="#5") {
-    return Html5Decode('#'+Copy(sData, 3, Length(sData)));
+  pre = LeftCopy(sData, 2);
+  if (pre=="#9") {
+    return hd0_decode(Copy(sData, 3, Length(sData)));
   }
-  if (pre=="#8") {
+  if (pre=="#6") {
     salt = Copy(sData, Length(sData)-15, 16);
     iv   = Copy(sData, Length(sData)-49, 32);
     ct   = Copy(sData, 3, Length(sData)-54);
-    return CryptoJsAesDecrypt("t4^h2#oumt0L2IQKjl%1b1@lpN%tm!rW5BSSAGoh2E#P1pZCpF", ct, iv, salt);
+    return CryptoJsAesDecrypt('vG~N:=!d~Nhkn=k^)}_>F*zvTD=~ffZ+3pE!WCY4>X!QJY4>X!QJsuvu1HFvP_rE^Ny', ct, iv, salt);
   }
   if (pre=="#0") {
       return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
@@ -1099,14 +1116,28 @@ string UstoreDecode(string data) {
   if (data=="") return "";
   if (data[1]=="=") {
     data = Copy(data, 2, Length(data)-1);
-    string s1 = "zcbmxvnZCBMXVN01234";
-    string s2 = "qawsedrQAWSEDR98765";
+    string s1 = "qsefthzxQSEFTHZX01234";
+    string s2 = "plijymknPLIJYMKN98765";
     for (int i=1; i <= Length(s1); i++) {
       data = ReplaceStr(data, s1[i],  "__");
       data = ReplaceStr(data, s2[i], s1[i]);
       data = ReplaceStr(data,  "__", s2[i]);
     }
     data = HmsHttpDecode(HmsBase64Decode(data));
+    s1 = "WO87FXYEZP4abQ2cdR0efS9ghTHijUK";
+    s2 = "k6lBmCnJoMpGq3rAsLt1uNv5wDxIyVz";
+    for (i=1; i <= Length(s1); i++) {
+      data = ReplaceStr(data, s1[i],  "__");
+      data = ReplaceStr(data, s2[i], s1[i]);
+      data = ReplaceStr(data,  "__", s2[i]);
+    }
+    data = HmsPercentDecode(HmsBase64Decode(data));
+    string decoded="", digits="0123456789abcdefghijklmnopqrstuvwxyz"; // base36 decode
+    for (i=1; i < Length(data); i+=2) {
+      if (data[i]!="!") break; i++;
+      decoded += chr((pos(data[i], digits)-1)*36 + pos(data[i+1], digits)-1);
+    }
+    data = decoded;
   }
   return data;
 }
