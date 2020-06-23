@@ -1,4 +1,4 @@
-﻿// 2020.06.22
+﻿// 2020.06.23
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -245,14 +245,16 @@ string AllohaDecode(string sData) {
 ///////////////////////////////////////////////////////////////////////////////
 // Раскодирование ссылки с сайта bazon.info
 string BazonDecode(string data, string path) {
+  int i = StrToInt(Copy(data, Length(data), 1));
+  data = Copy(data, 1, Length(data)-1);
   if (ProgramVersion >= "3.0") {
     string s = 'decodeBase64=function(f){var g={},b=65,d=0,a,c=0,h,e="",k=String.fromCharCode,l=f.length;for(a="";91>b;)a+=k(b++);a+=a.toLowerCase()+"0123456789+/";for(b=0;64>b;b++)g[a.charAt(b)]=b;for(a=0;a<l;a++)for(b=g[f.charAt(a)],d=(d<<6)+b,c+=6;8<=c;)((h=d>>>(c-=8)&255)||a<l-2)&&(e+=k(h));return e};';
     data = jsEval(s+";(decodeBase64('"+data+"'))");
   } else {
     data = HmsBase64Decode(data);
   }
-  string c = Copy(data, 1, 4);
-  string d = Copy(data, 5, Length(data)-4);
+  string c = Copy(data, 1, i)+"TZ#x!z40";
+  string d = Copy(data, i+1, Length(data)-i);
   Variant e[256];
   int g, f = 0; string h = '';
   for (int k = 0; k < 256; k++) e[k] = k;
@@ -304,7 +306,8 @@ void CreateLinks() {
           sLink = VLINKS.S['bazon\\iframe'];
           HmsRegExMatch("^(http.*?//[^/]+)", sLink, sServ);
           if (VIDEO.B['isserial']) {
-            sHtml = HmsDownloadURL(sLink, 'Referer: '+sLink+'\r\nOrigin: '+sServ);
+            if (Pos('bazon.site', sLink)>0)
+            sHtml = HmsDownloadURL(sLink, 'Referer: http://4h0y.gitlab.io/\r\nOrigin: '+sServ);
             if (HmsRegExMatch('<script>eval(\\(.*?\\))</script>', sHtml, js, 1, PCRE_SINGLELINE)) sData = jsEval(js);
             HmsRegExMatch('path:"(.*?)"', sData, path);
             if (HmsRegExMatch("eval(\\(.*?split\\('\\|'\\),0,{}\\)\\))", sData, js, 1, PCRE_SINGLELINE)) sData = jsEval(js);

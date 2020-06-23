@@ -1,4 +1,4 @@
-﻿// 2020.06.21
+﻿// 2020.06.23
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -27,14 +27,16 @@ THmsScriptMediaItem GetRoot() {
 ///////////////////////////////////////////////////////////////////////////////
 // Раскодирование ссылки с сайта bazon.info
 string BazonDecode(string data, string path) {
+  int i = StrToInt(Copy(data, Length(data), 1));
+  data = Copy(data, 1, Length(data)-1);
   if (ProgramVersion >= "3.0") {
     string s = 'decodeBase64=function(f){var g={},b=65,d=0,a,c=0,h,e="",k=String.fromCharCode,l=f.length;for(a="";91>b;)a+=k(b++);a+=a.toLowerCase()+"0123456789+/";for(b=0;64>b;b++)g[a.charAt(b)]=b;for(a=0;a<l;a++)for(b=g[f.charAt(a)],d=(d<<6)+b,c+=6;8<=c;)((h=d>>>(c-=8)&255)||a<l-2)&&(e+=k(h));return e};';
     data = jsEval(s+";(decodeBase64('"+data+"'))");
   } else {
     data = HmsBase64Decode(data);
   }
-  string c = Copy(data, 1, 4);
-  string d = Copy(data, 5, Length(data)-4);
+  string c = Copy(data, 1, i)+"TZ#x!z40";
+  string d = Copy(data, i+1, Length(data)-i);
   Variant e[256];
   int g, f = 0; string h = '';
   for (int k = 0; k < 256; k++) e[k] = k;
@@ -1149,7 +1151,10 @@ string UstoreDecode(string data) {
 void GetLink_HLS(string sLink) {
   string sQual, sSelectedQual, html, js, data, sVal, path, sServ, hash, id;
   HmsRegExMatch("^(http.*?//[^/]+)", sLink, sServ);
-  html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath+'\r\nOrigin: '+sServ));
+  if (Pos('bazon.site', sLink)>0)
+    html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: http://4h0y.gitlab.io/\r\nOrigin: '+sServ));
+  else
+    html = HmsUtf8Decode(HmsDownloadURL(sLink, 'Referer: '+mpFilePath+'\r\nOrigin: '+sServ));
   HmsRegExMatch('hlsList.*"\\d+":"(.*?)"', html, MediaResourceLink); // Первый вариант
   HmsRegExMatch('"(?:hls|file)":"(.*?)"' , html, MediaResourceLink); // Второй вариант
   if ((MediaResourceLink=="") && HmsRegExMatch('videoFilesEmdedCode[^>]+src=.?"(.*?)"', html, MediaResourceLink)) {
@@ -1170,7 +1175,7 @@ void GetLink_HLS(string sLink) {
       if (HmsRegExMatch('<script>eval(\\(.*?\\))</script>', html, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
       HmsRegExMatch('path:"(.*?)"', data, path);
       if (HmsRegExMatch("eval(\\(.*?split\\('\\|'\\),0,{}\\)\\))", data, js, 1, PCRE_SINGLELINE)) data = jsEval(js);
-      HmsRegExMatch('file="(.*?)";', data, sVal);
+      HmsRegExMatch('file:"(.*?)"', data, sVal);
       sVal = ReplaceStr(sVal, '"+"', "");
       MediaResourceLink = BazonDecode(sVal, path);
     } else {
