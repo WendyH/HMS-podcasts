@@ -1,4 +1,4 @@
-﻿// 2020.06.23
+﻿// 2020.06.27
 ////////////////////////  Создание  списка  видео   ///////////////////////////
 #define mpiJsonInfo 40032 // Идентификатор для хранения json информации о фильме
 #define mpiKPID     40033 // Идентификатор для хранения ID кинопоиска
@@ -221,8 +221,8 @@ string hd0_decode(string data) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Расшифровка текста плеера playerjs-alloha-new с allohastream.com
-string AllohaDecode(string sData) {
-  string pre, salt, iv, ct; int i;
+string AllohaDecode(string sData, string &sHtml) {
+  string pre, salt, iv, ct, key, js; int i;
   Variant trash = ["##P3w7Xl58Kj4qPj8/Pl58Xjx8Pnw/ISrihJYofDshP17ihJY+", "##Pzs+KSEoKjt8fD58KjxefCp8XipgPj98KHwqPnx8fl1bfD58Kl4q", "##PGBeKmAqPnzihJYqKuKEll0/Wyo7fHw+fCrihJY7Xipg4oSWKj4=", "##fFs+KuKElj5eP1s7fHw+fCo8KirihJZdfHxePCoqfA==", "##OyE/XuKElj4qXipgfHxePCrihJZ8fF4qYF4qKnzihJYqfl1bfD58"];
   for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
   for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
@@ -230,16 +230,59 @@ string AllohaDecode(string sData) {
   if (pre=="#9") {
     return hd0_decode(Copy(sData, 3, Length(sData)));
   }
-  if (pre=="#6") {
+  if (pre=="#7") {
+    js = sHtml;
+    TRegExpr Regex = TRegExpr.Create('["\'](\\w+)["\'],(\\d+),["\'](\\w+)["\'],(\\d+),(\\d+),');
+    for (i=0; i<9; i++) if (Regex.Search(js)) js = JsUnpack(Regex.Match(1), StrToInt(Regex.Match(2)), Regex.Match(3), StrToInt(Regex.Match(4)), StrToInt(Regex.Match(5)));
+    Regex.Free();
+    if (!HmsRegExMatch('.*=\\s*["\'](.*?)["\']', js, key)) HmsLogMessage(2, 'Не удалось найти значение Key для расшифровки alloha!');
     salt = Copy(sData, Length(sData)-15, 16);
     iv   = Copy(sData, Length(sData)-49, 32);
     ct   = Copy(sData, 3, Length(sData)-54);
-    return CryptoJsAesDecrypt('vG~N:=!d~Nhkn=k^)}_>F*zvTD=~ffZ+3pE!WCY4>X!QJY4>X!QJsuvu1HFvP_rE^Ny', ct, iv, salt);
+    return CryptoJsAesDecrypt(key, ct, iv, salt);
   }
   if (pre=="#0") {
     return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
   }
   return sData;
+}
+
+double pow(double base, int expon) {
+  if (expon==0) return 1;
+  if (base ==0) return 0;
+  if ((base>=0) && (expon<0)) return 1 / Exp(Abs(expon) * Ln(base));
+  return Exp(expon * Ln(base));
+}
+
+////////////////////////////////////////////////////////////////////////////
+string BaseConverter(string d, int e, int f) {
+  string g = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/';
+  string h = Copy(g, 1, e);
+  string i = Copy(g, 1, f);
+  string s = ""; for (int n=Length(d); n>0 ; n--) s += d[n]; d = s; // reverse
+  double j = 0;
+  for(int c= 0; c < Length(d); c++) {
+    int p = pos(d[int(c+1)], h);
+    if (p > 0) j += Round((p-1) * pow(e, c));
+  }
+  string k = '';
+  while (j > 0) {
+    k = i[Round(j % f)+1] + k;
+    j = Round((j - (j % f)) / f);
+  }
+  if (k=='') return '0'; else return k;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Распаковка js-скрипта
+string JsUnpack(string h, int u, string n, int t, int e, string r="") {
+  r = "";
+  for (int i=0; i < Length(h); i++) {
+    string s = ""; while (h[i+1] != n[e+1]) { s += h[i+1]; i++; }
+    for (int j=0; j < Length(n); j++) s = ReplaceStr(s, n[j+1], str(j));
+    r += chr(StrToInt(BaseConverter(s, e, 10)) - t);
+  }
+  return r;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -374,9 +417,9 @@ void CreateLinks() {
                 for (int w=0; w < PL.Count; w++) {
                   TRANSLATION = PL.O[PL.Names[w]];
                   sVal   = TRANSLATION.S['player'];
-                  sData  = AllohaDecode(sVal);
+                  sData  = AllohaDecode(sVal, sHtml);
                   HmsRegExMatch('"file":"(.*?)"', sData, sVal);
-                  sLink  = AllohaDecode(sVal);
+                  sLink  = AllohaDecode(sVal, sHtml);
                   sGrp = Trim('alloha Сезон '+PLAYLIST.Names[i]+' '+ReplaceStr(TRANSLATION.S['translation'], 'Не требуется', ''));
                   Item = CreateMediaItem(FolderItem, Format('%.2d cерия', [StrToInt(mpSeriesEpisodeNo)]), sLink, mpThumbnail, gnDefaultTime, sGrp);
                   Item.ItemParent[mpiFolderSortOrder] = 'mpTitle';

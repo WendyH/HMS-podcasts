@@ -1,4 +1,4 @@
-﻿// 2020.06.23
+﻿// 2020.06.27
 ////////////////////////  Получение ссылки на поток ///////////////////////////
 #define mpiJsonInfo 40032
 #define mpiKPID     40033
@@ -60,7 +60,7 @@ string BazonDecode(string data, string path) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Получение ссылки на Youtube
-bool GetLink_Youtube33(string sLink) {
+bool GetLink_Youtube44(string sLink) {
   string sData, sVideoID='', sAudio='', sSubtitlesLanguage='ru',
   sSubtitlesUrl, sFile, sVal, sMsg, sConfig, sHeaders, hlsUrl, subsUrl, jsUrl, 
   streamMap, algorithm, sType, itag, sig, alg, s, sp; TStringList QLIST;
@@ -78,8 +78,8 @@ bool GetLink_Youtube33(string sLink) {
   bool bQualLog   = Pos('--qualitylog', mpPodcastParameters)>0;
   
   if (!HmsRegExMatch('[\\?&]v=([^&]+)'       , sLink, sVideoID))
-    if (!HmsRegExMatch('youtu.be/([^&]+)'      , sLink, sVideoID))
-    HmsRegExMatch('/(?:embed|v)/([^\\?]+)', sLink, sVideoID);
+  if (!HmsRegExMatch('youtu.be/([^&]+)'      , sLink, sVideoID))
+       HmsRegExMatch('/(?:embed|v)/([^\\?]+)', sLink, sVideoID);
   
   if (sVideoID=='') return;
   
@@ -134,37 +134,16 @@ bool GetLink_Youtube33(string sLink) {
     hlsUrl = PLAYER_RESPONSE.S['streamingData\\hlsManifestUrl'];
     jsUrl  = JSON.S['assets\\js'];
     
-    if (hlsUrl!='') {
-      MediaResourceLink = ' '+hlsUrl;
-      bAdaptive = false;
-      sData = HmsDownloadUrl(hlsUrl, sHeaders, true);
-      RegEx = TRegExpr.Create('BANDWIDTH=(\\d+).*?RESOLUTION=(\\d+)x(\\d+).*?(http[^#]*)', PCRE_SINGLELINE);
-      try {
-        if (RegEx.Search(sData)) do {
-          sLink = '' + RegEx.Match(4);
-          height = StrToIntDef(RegEx.Match(3), 0);
-          if (mpPodcastMediaFormats!='') {
-            priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
-            if ((priority>=0) && (priority>minPriority)) {
-              MediaResourceLink = sLink; minPriority = priority;
-            }
-          } else if ((height > selHeight) && (height <= maxHeight)) {
-            MediaResourceLink = sLink; selHeight = height;
-          }
-          QLIST.Values[Format('%.4d', [height])] = sLink;
-        } while (RegEx.SearchAgain());
-      } finally { RegEx.Free(); }
-      
-    } else if (PLAYER_RESPONSE.B['streamingData\\formats']) {
+    if (PLAYER_RESPONSE.B['streamingData\\formats']) {
       FORMATS = PLAYER_RESPONSE.O['streamingData\\formats'].AsArray;
-      if (FORMATS[0].B['cipher'])
+      if (FORMATS[0].B['signatureCipher'])
         algorithm = HmsDownloadURL('https://hms.lostcut.net/youtube/getalgo.php?jsurl='+HmsHttpEncode(jsUrl));
       for(i=0; i<FORMATS.Length; i++) {
         VIDEO = FORMATS[i];
-        if (VIDEO.B['cipher']) {
-          sLink = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 'url', '', '&'));
-          sig   = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 's'  , '', '&'));
-          sp    = HmsHttpDecode(ExtractParam(VIDEO.S['cipher'], 'sp' , '', '&'));
+        if (VIDEO.B['signatureCipher']) {
+          sLink = HmsHttpDecode(ExtractParam(VIDEO.S['signatureCipher'], 'url', '', '&'));
+          sig   = HmsHttpDecode(ExtractParam(VIDEO.S['signatureCipher'], 's'  , '', '&'));
+          sp    = HmsHttpDecode(ExtractParam(VIDEO.S['signatureCipher'], 'sp' , '', '&'));
           if (sig!='') {
             for (w=1; w<=WordCount(algorithm, ' '); w++) {
               alg = ExtractWord(w, algorithm, ' ');
@@ -243,6 +222,27 @@ bool GetLink_Youtube33(string sLink) {
         MediaResourceLink = '-hide_banner -reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 2 -fflags +genpts -i "'+Trim(MediaResourceLink)+'"'+sVal+' -i "'+Trim(sFile)+'"';
       }
     }
+    if ((MediaResourceLink=='') && (hlsUrl!='')) {
+      MediaResourceLink = ' '+hlsUrl;
+      bAdaptive = false;
+      sData = HmsDownloadUrl(hlsUrl, sHeaders, true);
+      RegEx = TRegExpr.Create('BANDWIDTH=(\\d+).*?RESOLUTION=(\\d+)x(\\d+).*?(http[^#]*)', PCRE_SINGLELINE);
+      try {
+        if (RegEx.Search(sData)) do {
+          sLink = '' + RegEx.Match(4);
+          height = StrToIntDef(RegEx.Match(3), 0);
+          if (mpPodcastMediaFormats!='') {
+            priority = HmsMediaFormatPriority(height, mpPodcastMediaFormats);
+            if ((priority>=0) && (priority>minPriority)) {
+              MediaResourceLink = sLink; minPriority = priority;
+            }
+          } else if ((height > selHeight) && (height <= maxHeight)) {
+            MediaResourceLink = sLink; selHeight = height;
+          }
+          QLIST.Values[Format('%.4d', [height])] = sLink;
+        } while (RegEx.SearchAgain());
+      } finally { RegEx.Free(); }
+    }    
     // Если еще не установлена реальная длительность видео - устанавливаем
     if ((Trim(mpTimeLength)=='') || (RightCopy(mpTimeLength, 6)=='00.000') && (hlsUrl=='')) {
       PodcastItem[mpiTimeLength] = HmsTimeFormat(PLAYER_RESPONSE.I['videoDetails\\lengthSeconds']);
@@ -675,9 +675,9 @@ void CreateLinks() {
                 for (int w=0; w < PL.Count; w++) {
                   TRANSLATION = PL.O[PL.Names[w]];
                   sVal   = TRANSLATION.S['player'];
-                  sData  = AllohaDecode(sVal);
+                  sData  = AllohaDecode(sVal, sHtml);
                   HmsRegExMatch('"file":"(.*?)"', sData, sVal);
-                  sLink  = AllohaDecode(sVal);
+                  sLink  = AllohaDecode(sVal, sHtml);
                   sGrp = Trim('alloha Сезон '+PLAYLIST.Names[i]+' '+ReplaceStr(TRANSLATION.S['translation'], 'Не требуется', ''));
                   Item = CreateMediaItem(PodcastItem, Format('%.2d cерия', [StrToInt(mpSeriesEpisodeNo)]), sLink, mpThumbnail, gnDefaultTime, sGrp);
                   Item.ItemParent[mpiFolderSortOrder] = 'mpTitle';
@@ -998,25 +998,68 @@ string CryptoJsAesDecrypt(string pass, string ct, string iv, string salt) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Расшифровка текста плеера playerjs-alloha-new с allohastream.com
-string AllohaDecode(string sData) {
-  string pre, salt, iv, ct; int i;
+string AllohaDecode(string sData, string &sHtml) {
+  string pre, salt, iv, ct, key, js; int i;
   Variant trash = ["##P3w7Xl58Kj4qPj8/Pl58Xjx8Pnw/ISrihJYofDshP17ihJY+", "##Pzs+KSEoKjt8fD58KjxefCp8XipgPj98KHwqPnx8fl1bfD58Kl4q", "##PGBeKmAqPnzihJYqKuKEll0/Wyo7fHw+fCrihJY7Xipg4oSWKj4=", "##fFs+KuKElj5eP1s7fHw+fCo8KirihJZdfHxePCoqfA==", "##OyE/XuKElj4qXipgfHxePCrihJZ8fF4qYF4qKnzihJYqfl1bfD58"];
   for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], "");
   for (i=0; i < Length(trash) ; i++) sData = ReplaceStr(sData, trash[i], ""); // Иногда мусор встраивается в мусор, поэтому проходим два раза
-  pre = LeftCopy(sData, 2);
+    pre = LeftCopy(sData, 2);
   if (pre=="#9") {
     return hd0_decode(Copy(sData, 3, Length(sData)));
   }
-  if (pre=="#6") {
+  if (pre=="#7") {
+    js = sHtml;
+    TRegExpr Regex = TRegExpr.Create('["\'](\\w+)["\'],(\\d+),["\'](\\w+)["\'],(\\d+),(\\d+),');
+    for (i=0; i<9; i++) if (Regex.Search(js)) js = JsUnpack(Regex.Match(1), StrToInt(Regex.Match(2)), Regex.Match(3), StrToInt(Regex.Match(4)), StrToInt(Regex.Match(5)));
+    Regex.Free();
+    if (!HmsRegExMatch('.*=\\s*["\'](.*?)["\']', js, key)) HmsLogMessage(2, 'Не удалось найти значение Key для расшифровки alloha!');
     salt = Copy(sData, Length(sData)-15, 16);
     iv   = Copy(sData, Length(sData)-49, 32);
     ct   = Copy(sData, 3, Length(sData)-54);
-    return CryptoJsAesDecrypt('vG~N:=!d~Nhkn=k^)}_>F*zvTD=~ffZ+3pE!WCY4>X!QJY4>X!QJsuvu1HFvP_rE^Ny', ct, iv, salt);
+    return CryptoJsAesDecrypt(key, ct, iv, salt);
   }
   if (pre=="#0") {
-      return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
+    return HmsBase64Decode(Copy(sData, 3, Length(sData)));    
   }
   return sData;
+}
+
+double pow(double base, int expon) {
+  if (expon==0) return 1;
+  if (base ==0) return 0;
+  if ((base>=0) && (expon<0)) return 1 / Exp(Abs(expon) * Ln(base));
+  return Exp(expon * Ln(base));
+}
+
+////////////////////////////////////////////////////////////////////////////
+string BaseConverter(string d, int e, int f) {
+  string g = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/';
+  string h = Copy(g, 1, e);
+  string i = Copy(g, 1, f);
+  string s = ""; for (int n=Length(d); n>0 ; n--) s += d[n]; d = s; // reverse
+  double j = 0;
+  for(int c= 0; c < Length(d); c++) {
+    int p = pos(d[int(c+1)], h);
+    if (p > 0) j += Round((p-1) * pow(e, c));
+  }
+  string k = '';
+  while (j > 0) {
+    k = i[Round(j % f)+1] + k;
+    j = Round((j - (j % f)) / f);
+  }
+  if (k=='') return '0'; else return k;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Распаковка js-скрипта
+string JsUnpack(string h, int u, string n, int t, int e, string r="") {
+  r = "";
+  for (int i=0; i < Length(h); i++) {
+    string s = ""; while (h[i+1] != n[e+1]) { s += h[i+1]; i++; }
+    for (int j=0; j < Length(n); j++) s = ReplaceStr(s, n[j+1], str(j));
+    r += chr(StrToInt(BaseConverter(s, e, 10)) - t);
+  }
+  return r;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1025,9 +1068,9 @@ void GetLink_Allohastream(string sLink, string sHeaders="Referer: http://www.hdk
   string html, data, sHeight, sQual, sSelectedQual, sTransID, sTrans, sSeasonName; int i, n, iPriority, iMinPriority=99;
   html = HmsUtf8Decode(HmsDownloadURL(sLink, sHeaders));
   HmsRegExMatch('Playerjs\\("(.*?)"', html, data);
-  data = AllohaDecode(data);
+  data = AllohaDecode(data, html);
   HmsRegExMatch('"file":"(.*?)"', data, MediaResourceLink);
-  MediaResourceLink = AllohaDecode(MediaResourceLink);
+  MediaResourceLink = AllohaDecode(MediaResourceLink, html);
   return;
 }
 
@@ -1388,7 +1431,7 @@ void GetLink() {
   else if (Pos('multikland'   , mpFilePath)>0) GetLink_HLS         (mpFilePath);
   else if (HmsRegExMatch('pleer\\w{2}\\.', mpFilePath, '')) GetLink_HLS(mpFilePath);
   else if (HmsRegExMatch('//vid\\d+'     , mpFilePath, '')) GetLink_HLS(mpFilePath);
-  else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_YouTube33(mpFilePath);
+  else if (HmsRegExMatch('(youtube.com|youto.be)', mpFilePath, '')) GetLink_Youtube44(mpFilePath);
   else if (LeftCopy(mpFilePath, 4)=='Info') VideoPreview();
   else if (LeftCopy(mpFilePath, 4)=='-Fav') AddRemoveFavorites();
   else if ((HmsFileMediaType(mpFilePath)==mtVideo) || (HmsFileMediaType(mpFilePath)==7)) MediaResourceLink = mpFilePath;
