@@ -14,7 +14,7 @@ string              gsAudioPrifile = "Музыка (Визуализация)"; 
 ///////////////////////////////////////////////////////////////////////////////
 // Установка переменной Podcast: поиск родительской папки, содержащий скрипт
 THmsScriptMediaItem GetRoot() {
-  ROOT = PodcastItem; // Начиная с текущего элемента, ищется создержащий срипт
+  ROOT = PodcastItem; // Начиная с текущего элемента, ищется содержащий скрипт
   while ((Trim(ROOT[510])=='') && (ROOT.ItemParent!=nil)) ROOT=ROOT.ItemParent;
   CONFIG.LoadFromString(ROOT[510]);
   if (CONFIG.SaveToString()=='') Error('Ошибка загрузки конфигурации! Возможно, где-то ошибка.');
@@ -76,7 +76,7 @@ void InfoLink() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Универсальное определение длителльности из полученного текста
+// Универсальное определение длительности из полученного текста
 string GetTimeLength(string sDura) {
   int nH, nM, nS, nSecs, nMins; string sH, sM, sS; if (Trim(sDura)=='') return '';
   if      (HmsRegExMatch3('(\\d*):(\\d*):(\\d\\d?)', sDura, sH, sM, sS)) { nH=StrToInt(sH); nM=StrToInt(sM); nS=StrToInt(sS); }
@@ -138,7 +138,7 @@ string ReplaceVars(string sVal) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Получение занчений из html 
+// Получение значений из html 
 void GetVars(TJsonObject CONF, string &sHtml) {
   string sName, sVal;
   for (int i=0; i<CONF.Count; i++) {
@@ -259,10 +259,15 @@ void CreateLinksFromTorrentFile(string sFile) {
 ///////////////////////////////////////////////////////////////////////////////
 // Поиск ссылки на скачивание торрент-файла и получение информационных о нём
 void DownloadTorrent(string &sHtml, TJsonObject RULE) {
-  string sData, sUrl, sFile, sID; int i, n; TJsonObject JSON;
+  string sData, sUrl, sFile, sID, sMsg; int i, n; TJsonObject JSON;
   
   // Поиск ссылки для скачивания
-  HmsRegExMatch(RULE.S['Url'], sHtml, sUrl); if (sUrl=='') { Error('Нет ссылки на скачивание torrent-файла.'); return; }
+  HmsRegExMatch(RULE.S['Url'], sHtml, sUrl);
+  if (sUrl=='') {
+    Error('Нет ссылки на скачивание torrent-файла.');
+    if (RULE.B['Error'] && HmsRegExMatch(RULE.S['Error'], sHtml, sMsg)) Error(sMsg);
+    return;
+  }
   
   // Восстанавливаем ссылку из относительной в полную (если нужно)
   if      (LeftCopy(sUrl, 2)=='//'  ) sUrl = 'http:'+ Trim(sUrl);
@@ -271,10 +276,11 @@ void DownloadTorrent(string &sHtml, TJsonObject RULE) {
   
   GetVars(RULE, sHtml); // Получение значений переменных из загруженной html-страницы
   
-  sData = HttpRequest(sUrl, RULE); // Скачиваем torrent-файл по указаному правилу
+  sData = HttpRequest(sUrl, RULE); // Скачиваем torrent-файл по указанному правилу
   
   if (Pos('8:announce', sData)<1) {
     Error('Ошибка получения torrent файла '+sUrl);
+    if (RULE.B['Error'] && HmsRegExMatch(RULE.S['Error'], sHtml, sMsg)) Error(sMsg);
     return;
   }
   
@@ -285,7 +291,7 @@ void DownloadTorrent(string &sHtml, TJsonObject RULE) {
   sFile = IncludeTrailingBackslash(HmsTranscodingTempDirectory+'Torrents')+PodcastItem.ItemID+'.torrent';
   HmsStringToFile(sData, sFile);
   
-  // Создание ссылкок на файлы внутри торрент-файла
+  // Создание ссылок на файлы внутри торрент-файла
   CreateLinksFromTorrentFile(sFile);
   
   // Ищем ID кинопоиска или IMDb, если нашли - запрашиваем рейтинг
@@ -298,8 +304,6 @@ void DownloadTorrent(string &sHtml, TJsonObject RULE) {
     //sData = HmsSendRequest('ahoy.yohoho.online', '/', 'POST', 'application/x-www-form-urlencoded', 'http://www.hdkinoteatr.com/\r\n', 'kinopoisk='+sID, 443);
     //sData = HmsDownloadURL('http://api.lostcut.net/hdkinoteatr/videos?kpid='+sID);
   }
-  
-  PodcastItem[mpiComment] = VARS.Values['Text']; // Запоминаем для отображения в Info ссылках
   
   if (HmsRegExMatch('imdb[\\.com]*/\\w+/[t]*(\\d+)', sHtml, sID)) {
     sData = HmsDownloadURL('http://www.omdbapi.com/?apikey=30ce34f1&i=tt'+sID);
@@ -318,7 +322,7 @@ void DownloadTorrent(string &sHtml, TJsonObject RULE) {
   Info('Рейтинг IMDb'     , sRatingIM);
   Info('Рейтинг КиноПоиск', sRatingKP);
   
-  // Создание информационных ссылкок
+  // Создание информационных ссылок
   Info('Раздают' , VARS.Values['Seeders'  ]);
   Info('Качают'  , VARS.Values['Leechers' ]);
   Info('Размер'  , VARS.Values['Size'     ]);
@@ -328,7 +332,10 @@ void DownloadTorrent(string &sHtml, TJsonObject RULE) {
   Info('Cубтитры', VARS.Values['Subs'     ]);
   Info('Качество', VARS.Values['Quality'  ]);
   Info('Скачало' , VARS.Values['Downloads']);
-  
+  Info('Автор'   , VARS.Values['Author'   ]);
+  Info('Альбом'  , VARS.Values['Album'    ]);
+
+  PodcastItem[mpiComment] = VARS.Values['Text']; // Запоминаем для отображения в Info ссылках
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -337,11 +344,11 @@ void CreateLinks() {
   string sHtml, sData, sVal, sLink, sName, sImg, sGrp; int i, n; THmsScriptMediaItem Item; bool bNeedLogin;
   // Загружаем страницу и проверяем, нужно ли нам залогиниться
   sHtml = HmsDownloadURL(mpFilePath, gsHeaders);
-  if (HmsRegExMatch('charset="?utf-?8', sHtml, '', 1, PCRE_CASELESS)) sHtml = HmsUtf8Decode(sHtml);
+  if (HmsRegExMatch('charset="?utf-?8', sHtml, '', 1, PCRE_CASELESS))  sHtml = HmsUtf8Decode(sHtml);
   bNeedLogin = CONFIG.B['Login']; if (CONFIG.B['LoginCondition']) bNeedLogin = HmsRegExMatch(CONFIG.S['LoginCondition'], sHtml, '');
   if (bNeedLogin) { 
     if (!Login(CONFIG['Login'], sHtml)) return; 
-    sHtml = HmsDownloadURL(mpFilePath, gsHeaders); // После логина - перезагружаем сраницу заново
+    sHtml = HmsDownloadURL(mpFilePath, gsHeaders); // После логина - перезагружаем страницу заново
     if (HmsRegExMatch('charset="?utf-?8', sHtml, '', 1, PCRE_CASELESS)) sHtml = HmsUtf8Decode(sHtml);
   }
   // Перебираем все условия
@@ -350,8 +357,8 @@ void CreateLinks() {
     for (i=0; i < CONDITIONS.Length; i++) {
       TJsonObject COND = CONDITIONS[i];
       if (COND.B['ConditionLink'] && !HmsRegExMatch(COND.S['ConditionLink'], mpFilePath, '')) continue; // Условие на совпадение в ссылке
-        if (COND.B['ConditionText'] && !HmsRegExMatch(COND.S['ConditionText'], sHtml     , '')) continue; // Условие на совпадение в тексте
-        if (COND.B['Rule' ]) { DownloadTorrent(sHtml, CONFIG[COND.S['Rule']]); return; } // Если указано правило - создаём ссылки по этому правилу
+      if (COND.B['ConditionText'] && !HmsRegExMatch(COND.S['ConditionText'], sHtml     , '')) continue; // Условие на совпадение в тексте
+      if (COND.B['Rule' ]) { DownloadTorrent(sHtml, CONFIG[COND.S['Rule']]); return; } // Если указано правило - создаём ссылки по этому правилу
       if (COND.B['Block']) {                                                           // Если указан Block - ищем эти блоки и создаём папки
         TRegExpr RegEx = TRegExpr.Create(COND.S['Block'], PCRE_SINGLELINE);
         if (RegEx.Search(sHtml)) do {
@@ -359,7 +366,7 @@ void CreateLinks() {
           HmsRegExMatch(COND.S['Title'], RegEx.Match(0), sName); sName = HmsHtmlToText(sName);
           HmsRegExMatch(COND.S['Link' ], RegEx.Match(0), sLink); if (sLink=='') continue;
           if (Length(sName) > 127 ) sName = LeftCopy(sName, 127); // На некоторых телевизорах крашится, если имя слишком длинное
-            // Восстанавливаем ссылку из относительной в полную (если нужно)
+          // Восстанавливаем ссылку из относительной в полную (если нужно)
           if      (LeftCopy(sLink, 2)=='//'  ) sLink = 'http:'+ Trim(sLink);
           else if (LeftCopy(sLink, 1)=='/'   ) sLink = HmsExpandLink(sLink, gsUrlBase );
           else if (LeftCopy(sLink, 2)=='./'  ) sLink = gsLongBase + Copy(sLink, 3, 999);
@@ -429,7 +436,7 @@ void CreateLinksFromLocalFolder() {
     HmsGetFileList(mpFilePath, FILES, '*.torrent'); 
     
     if ((FOLDERS.Count+FILES.Count)==0) {
-      Error('Каталог пуст или указан не правильно');
+      Error('Каталог пуст или указан неправильно');
       return;
     }
     
@@ -450,7 +457,7 @@ void CreateLinksFromLocalFolder() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Поиск установленного логина и пароля в папке соответвтующего сайта
+// Поиск установленного логина и пароля в папке соответствующего сайта
 void SetPassword4Site(string sDomen) {
   for (int i=0; i < ROOT.ChildCount; i++) {
     THmsScriptMediaItem Item = ROOT.ChildItems[i];
@@ -469,26 +476,26 @@ void SetPassword4Site(string sDomen) {
 ///////////////////////////////////////////////////////////////////////////////
 // Поиск названия на всех доступных сайтах
 void SearchTitle() {
-  string sHtml, sLink, sName, sLongBase, sUrl, sDomen; TJsonObject OBJ, CONF; TJsonArray SEARCHES=CONFIG['Search'].AsArray;
+  string sHtml, sLink, sName, sUrl, sDomen; TJsonObject OBJ, CONF; TJsonArray SEARCHES=CONFIG['Search'].AsArray;
   for (int i=0; i < SEARCHES.Length; i++) {
     OBJ   = SEARCHES[i]; if (!OBJ.B['Enable']) continue;
     CONF  = CONFIG[OBJ.S['Site']];
     sName = mpTitle; if (OBJ.B['Utf8']) sName = HmsUtf8Encode(sName);   
     sUrl  = ReplaceStr(OBJ.S['Url'], '<TITLE>', HmsPercentEncode(sName));
-    HmsRegExMatch2('^((.*?//[^/]+).*/)', sUrl, sLongBase, gsUrlBase);
+    HmsRegExMatch2('^((.*?//[^/]+).*/)', sUrl, gsLongBase, gsUrlBase);
     gsPHPProxy = OBJ.S['PHProxy'];
     if (gsPHPProxy!='') sUrl = gsPHPProxy+'?'+HmsPercentDecode(HmsExpandLink(sUrl, gsUrlBase));
     if (CONFIG.B['Headers']) gsHeaders += GetHeaders(CONFIG['Headers']);
     // Загружаем страницу и проверяем, нужно ли нам залогиниться
     sHtml = HmsDownloadURL(sUrl, gsHeaders);
-    if (HmsRegExMatch('charset="?utf-?8', sHtml, '', 1, PCRE_CASELESS)) sHtml = HmsUtf8Decode(sHtml);
+    if (HmsRegExMatch('charset="?utf-?8', sHtml, '', 1, PCRE_CASELESS))   sHtml = HmsUtf8Decode(sHtml);
     bool bNeedLogin = CONF.B['Login']; if (CONF.B['LoginCondition']) bNeedLogin = HmsRegExMatch(CONF.S['LoginCondition'], sHtml, '');
     if (bNeedLogin) { 
       // А вот тут нужно найти и переопределить логин и пароль для текущего сайта
       HmsRegExMatch('(//[^/:]+)', sUrl, sDomen);
       SetPassword4Site(sDomen); // Переустановим текущие значения mpPodcastAuthorizationUserName и mpPodcastAuthorizationPassword
       if (!Login(CONF['Login'], sHtml)) return; 
-      sHtml = HmsDownloadURL(sUrl, gsHeaders); // После логина - перезагружаем сраницу заново
+      sHtml = HmsDownloadURL(sUrl, gsHeaders); // После логина - перезагружаем страницу заново
       if (HmsRegExMatch('charset="?utf-?8', sHtml, '', 1, PCRE_CASELESS)) sHtml = HmsUtf8Decode(sHtml);
     }
     // Производим непосредственно поиск нужных блоков со ссылками и названием
@@ -538,7 +545,7 @@ void CheckPodcastUpdate() {
   
   // Если после последней проверки прошло меньше получаса - валим
   if ((Trim(ROOT[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(ROOT[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
-    ROOT[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
+  ROOT[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   sData = HmsDownloadURL('https://api.github.com/repos/WendyH/HMS-podcasts/contents/TorrentRover', "Accept-Encoding: gzip, deflate", true);
   JSON  = TJsonObject.Create();
   try {
@@ -548,10 +555,10 @@ void CheckPodcastUpdate() {
       JFILE = JARRAY[i]; if(JFILE.S['type']!='file') continue;
       sName = ChangeFileExt(JFILE.S['name'], ''); sExt = ExtractFileExt(JFILE.S['name']);
       switch (sExt) { case'.cpp':sLang='C++Script'; case'.pas':sLang='PascalScript'; case'.vb':sLang='BasicScript'; case'.js':sLang='JScript'; default:sLang=''; } // Определяем язык по расширению файла
-      if      (sName=='Alt1') { mpiSHA=100701; mpiScript=571; sMsg='Требуется запуск "Создать ленты подкастов"'; } // Это сприпт создания покаст-лент   (Alt+1)
-      else if (sName=='Alt2') { mpiSHA=100702; mpiScript=530; sMsg='Требуется обновить раздел заново';           } // Это скрипт чтения списка ресурсов (Alt+2)
-      else if (sName=='Alt3') { mpiSHA=100703; mpiScript=510; sMsg='Требуется обновить раздел заново';           } // Это скрипт чтения дополнительных в RSS (Alt+3)
-      else if (sName=='Alt4') { mpiSHA=100704; mpiScript=550; sMsg=''; }                                           // Это скрипт получения ссылки на ресурс  (Alt+4)
+      if      (sName=='Alt1'  ) { mpiSHA=100701; mpiScript=571; sMsg='Требуется запуск "Создать ленты подкастов"'; } // Это скрипт создания подкаст-лент  (Alt+1)
+      else if (sName=='Alt2'  ) { mpiSHA=100702; mpiScript=530; sMsg='Требуется обновить раздел заново';           } // Это скрипт чтения списка ресурсов (Alt+2)
+      else if (sName=='Config') { mpiSHA=100703; mpiScript=510; sMsg='Требуется обновить раздел заново';           } // Это скрипт чтения дополнительных в RSS (Alt+3)
+      else if (sName=='Alt4'  ) { mpiSHA=100704; mpiScript=550; sMsg=''; }                                           // Это скрипт получения ссылки на ресурс  (Alt+4)
       else continue;                      // Если файл не определён - пропускаем
       if (ROOT[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
@@ -592,7 +599,7 @@ void CheckPodcastUpdate() {
     THmsScriptMediaItem Folder = PodcastItem; // Начиная с текущего элемента, ищется ссылка на домен (вверх по родительским папкам)
     while ((LeftCopy(Folder[mpiFilePath], 4)!='http') && (Folder.ItemParent!=nil) && (Folder[mpiFilePath]!='-SearchFolder')) Folder=Folder.ItemParent;
     
-    if (Folder[mpiFilePath]=='-SearchFolder') {
+    if ((PodcastItem.ItemClassID==53) && (Folder[mpiFilePath]=='-SearchFolder')) {
       // Если обновляемый подкаст находится в папке "Поиск", то запускаем процесс поиска 
       SearchTitle();
 
@@ -618,7 +625,7 @@ void CheckPodcastUpdate() {
     if (HmsRegExMatch('trailerKP=(\\d+)', mpFilePath, sID)) GetTrailerLinkKP(sID);
     if (HmsRegExMatch('trailerIM=(\\d+)', mpFilePath, sID)) GetTrailerLinkIM(sID);
     if (LeftCopy(mpFilePath, 4)=='Info') InfoLink();
-    // Если это ссылка на torrserver, проверим, есть ли ещё хеш этотого торрента
+    // Если это ссылка на torrserver, проверим, есть ли ещё хеш этого торрента
     if (HmsRegExMatch("--torrserver=([^\\s]+)", mpPodcastParameters, sServ) && HmsRegExMatch("/torrent/view/(\\w+)/", mpFilePath, sHash) && FileExists(mpComment)) {
       if (HmsRegExMatch2('^(.*?):(\\d+)', sServ, sServ, sVal)) nPort = StrToInt(sVal);
       sData = HmsSendRequest(sServ, '/torrent/cache', 'POST', 'application/json', '', '{"Hash":"'+sHash+'"}', nPort);
