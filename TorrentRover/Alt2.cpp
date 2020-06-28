@@ -542,10 +542,13 @@ void CreateLinksFromTorrServer() {
 // Проверка и обновление скриптов подкаста
 void CheckPodcastUpdate() {
   string sData, sName, sLang, sExt, sMsg; int i, mpiTimestamp=100602, mpiSHA, mpiScript; TJsonObject JSON, JFILE; TJsonArray JARRAY; bool bChanges=false;
+
+  THmsScriptMediaItem Podcast = PodcastItem; // Начиная с текущего элемента, ищется содержащий скрипт
+  while ((Trim(Podcast[mpiFilePath])!='-RootTorrentRover') && (Podcast.ItemParent!=nil)) Podcast=Podcast.ItemParent;
   
   // Если после последней проверки прошло меньше получаса - валим
-  if ((Trim(ROOT[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(ROOT[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
-  ROOT[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
+  if ((Trim(Podcast[550])=='') || (DateTimeToTimeStamp1970(Now, false)-StrToIntDef(Podcast[mpiTimestamp], 0) < 14400)) return; // раз в 4 часа
+  Podcast[mpiTimestamp] = DateTimeToTimeStamp1970(Now, false); // Запоминаем время проверки
   sData = HmsDownloadURL('https://api.github.com/repos/WendyH/HMS-podcasts/contents/TorrentRover', "Accept-Encoding: gzip, deflate", true);
   JSON  = TJsonObject.Create();
   try {
@@ -555,23 +558,23 @@ void CheckPodcastUpdate() {
       JFILE = JARRAY[i]; if(JFILE.S['type']!='file') continue;
       sName = ChangeFileExt(JFILE.S['name'], ''); sExt = ExtractFileExt(JFILE.S['name']);
       switch (sExt) { case'.cpp':sLang='C++Script'; case'.pas':sLang='PascalScript'; case'.vb':sLang='BasicScript'; case'.js':sLang='JScript'; default:sLang=''; } // Определяем язык по расширению файла
-      if      (sName=='Alt1'  ) { mpiSHA=100701; mpiScript=571; sMsg='Требуется запуск "Создать ленты подкастов"'; } // Это скрипт создания подкаст-лент  (Alt+1)
-      else if (sName=='Alt2'  ) { mpiSHA=100702; mpiScript=530; sMsg='Требуется обновить раздел заново';           } // Это скрипт чтения списка ресурсов (Alt+2)
-      else if (sName=='Config') { mpiSHA=100703; mpiScript=510; sMsg='Требуется обновить раздел заново';           } // Это скрипт чтения дополнительных в RSS (Alt+3)
-      else if (sName=='Alt4'  ) { mpiSHA=100704; mpiScript=550; sMsg=''; }                                           // Это скрипт получения ссылки на ресурс  (Alt+4)
+      if      (sName=='Alt1') { mpiSHA=100701; mpiScript=571; sMsg='Требуется запуск "Создать ленты подкастов"'; } // Это скрипт создания подкаст-лент  (Alt+1)
+      else if (sName=='Alt2') { mpiSHA=100702; mpiScript=530; sMsg='Требуется обновить раздел заново';           } // Это скрипт чтения списка ресурсов (Alt+2)
+      else if (sName=='Alt4') { mpiSHA=100704; mpiScript=550; sMsg=''; }                                           // Это скрипт получения ссылки на ресурс  (Alt+4)
+      else if ((sName=='Config') && (sLang=='JScript')) { mpiSHA=100703; mpiScript=510; sMsg='Требуется обновить раздел заново'; } // Это скрипт чтения дополнительных в RSS (Alt+3)
       else continue;                      // Если файл не определён - пропускаем
-      if (ROOT[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
+      if (Podcast[mpiSHA]!=JFILE.S['sha']) { // Проверяем, требуется ли обновлять скрипт?
         sData = HmsDownloadURL(JFILE.S['download_url'], "Accept-Encoding: gzip, deflate", true); // Загружаем скрипт
         sData = ReplaceStr(sData, 'п»ї', ''); // Remove BOM
         if (sData=='') continue;                                                  // Если не получилось загрузить, пропускаем
-        ROOT[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
-        ROOT[mpiScript+1] = sLang;                                                // Язык скрипта
-        ROOT[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
+        Podcast[mpiScript+0] = HmsUtf8Decode(ReplaceStr(sData, '\xEF\xBB\xBF', '')); // Скрипт из unicode и убираем BOM
+        Podcast[mpiScript+1] = sLang;                                                // Язык скрипта
+        Podcast[mpiSHA     ] = JFILE.S['sha']; bChanges = true;                      // Запоминаем значение SHA скрипта
         if (sName=='Alt2') { // В нашем случае скрипт Alt2 от Alt4 ничем не отличается кроме первой закомментированной строки
-          ROOT[550] = '//'+ROOT[mpiScript+0];  // Alt4 скрипт
-          ROOT[551] = sLang;
+          Podcast[550] = '//'+Podcast[mpiScript+0];  // Alt4 скрипт
+          Podcast[551] = sLang;
         }
-        HmsLogMessage(1, ROOT[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
+        HmsLogMessage(1, Podcast[mpiTitle]+": Обновлён скрипт подкаста "+sName);     // Сообщаем об обновлении в журнал
         if (sMsg!='') PodcastItem.AddFolder(' !'+sMsg+'!');                       // Выводим сообщение как папку
         
       }
