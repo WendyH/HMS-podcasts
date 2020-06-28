@@ -594,7 +594,7 @@ void CheckPodcastUpdate() {
     
     if (Pos('--nocheckupdates' , mpPodcastParameters)<1) CheckPodcastUpdate();
     
-    bool bDirExists = DirectoryExists(mpFilePath); // for HMS 2.25 bug
+    Variant bDirExists = DirectoryExists(mpFilePath); // тип Variant - это баг HMS 2.25
     if ((LeftCopy(mpFilePath, 1)!='/') && (FileExists(mpFilePath) || bDirExists)) { CreateLinksFromLocalFolder(); return; }      
     if (mpFilePath=='-TorrServer') { CreateLinksFromTorrServer(); return; }
     
