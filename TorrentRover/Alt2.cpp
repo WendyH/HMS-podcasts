@@ -494,7 +494,7 @@ void SearchTitle() {
       // А вот тут нужно найти и переопределить логин и пароль для текущего сайта
       HmsRegExMatch('(//[^/:]+)', sUrl, sDomen);
       SetPassword4Site(sDomen); // Переустановим текущие значения mpPodcastAuthorizationUserName и mpPodcastAuthorizationPassword
-      if (!Login(CONF['Login'], sHtml)) return; 
+      if (!Login(CONF['Login'], sHtml)) continue; 
       sHtml = HmsDownloadURL(sUrl, gsHeaders); // После логина - перезагружаем страницу заново
       if (HmsRegExMatch('charset="?utf-?8', sHtml, '', 1, PCRE_CASELESS)) sHtml = HmsUtf8Decode(sHtml);
     }
