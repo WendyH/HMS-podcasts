@@ -98,7 +98,7 @@ bool CheckForSure() {
   
   Folder = AddItem(FolderItem, '01. Локальные папки');
   AddItem(Folder, 'TorrServer'       , '-TorrServer');
-  AddItem(Folder, 'Video (.torrents)', 'D:\\VIDEO'  ); // Для примера
+  AddItem(Folder, 'Video (.torrents)', 'D:/VIDEO'  ); // Для примера
   
   Folder = AddItem(FolderItem, '02. RuTracker.org', 'http://rutracker37.tk', true);
   AddItem(Folder, 'Зарубежное кино'               , '/forum/viewforum.php?f=7');

@@ -431,14 +431,10 @@ void CreateLinksFromLocalFolder() {
   TStrings FOLDERS = TStringList.Create();
   TTorrentFile TorrentFile = TTorrentFile.Create();  
   try {
-    
     HmsGetDirectoryList(mpFilePath, FOLDERS); 
-    HmsGetFileList(mpFilePath, FILES, '*.torrent'); 
+    HmsGetFileList(mpFilePath, FILES, '*.*'); 
     
-    if ((FOLDERS.Count+FILES.Count)==0) {
-      Error('Каталог пуст или указан неправильно');
-      return;
-    }
+    if ((FOLDERS.Count+FILES.Count)==0) { Error('Каталог пуст или указан неправильно'); return; }
     
     for (i=0; i<FOLDERS.Count; i++) {
       sLink = FOLDERS.Strings[i];
@@ -448,9 +444,13 @@ void CreateLinksFromLocalFolder() {
     for (i=0; i<FILES.Count; i++) {
       sLink = FILES.Strings[i];
       sName = ExtractFileName(sLink);
-      TorrentFile.LoadFromFile(sLink);
-      if (Trim(TorrentFile.Name)!='') sName = TorrentFile.Name;
-      AddFolder(sName, ReplaceStr(sLink, '\\', '/'));
+      if (ExtractFileExt(sLink)=='.torrent') {
+        TorrentFile.LoadFromFile(sLink);
+        if (Trim(TorrentFile.Name)!='') sName = TorrentFile.Name;
+        PodcastItem.AddFolder(sName).Properties[mpiFilePath] = sLink;
+      } else if (HmsFileMediaType(sName)==mtVideo) {
+        HmsCreateMediaItem(sName, PodcastItem.ItemID).Properties[mpiFilePath] = sLink;
+      }
     }
     
   } finally {FILES.Free; FOLDERS.Free; TorrentFile.Free; }
@@ -509,7 +509,7 @@ void SearchTitle() {
       if      (LeftCopy(sLink, 2)=='//'  ) sLink = 'http:'+ Trim(sLink);
       else if (LeftCopy(sLink, 1)=='/'   ) sLink = HmsExpandLink(sLink, gsUrlBase );
       else if (LeftCopy(sLink, 4)!='http') sLink = HmsExpandLink(sLink, gsLongBase);
-      AddFolder(sName,  HmsHtmlDecode(sLink));
+      AddFolder(sName,  OBJ.S['Site']+'\\'+HmsHtmlDecode(sLink));
     } while (RegEx.SearchAgain());
   }
 }
@@ -589,13 +589,18 @@ void CheckPodcastUpdate() {
   string sDomen, sID, sServ, sHash, sVal, sRet, sData; int nPort=8090; 
   
   if (PodcastItem.IsFolder) {
+    // previous version patching
+    if (ROOT[mpiFilePath]=='-RootTorrentRover') {
+      THmsScriptMediaItem Item = ROOT.FindItemByProperty(mpiTitle, '00. Поиск');
+      if (Item!=nil) if (Item[mpiFilePath]!='-SearchFolder') { Item[mpiFilePath] = '-SearchFolder'; Item[mpiTitle] = '00. Поиск'; }
+    }
     PodcastItem.DeleteChildItems(); // Удаление существующих ссылок
     HmsRegExMatch('--muzprofile="(.*?)"', mpPodcastParameters, gsAudioPrifile);
     
     if (Pos('--nocheckupdates' , mpPodcastParameters)<1) CheckPodcastUpdate();
     
     Variant bDirExists = DirectoryExists(mpFilePath); // тип Variant - это баг HMS 2.25
-    if ((LeftCopy(mpFilePath, 1)!='/') && (FileExists(mpFilePath) || bDirExists)) { CreateLinksFromLocalFolder(); return; }      
+    if (FileExists(mpFilePath) || bDirExists) { CreateLinksFromLocalFolder(); return; }      
     if (mpFilePath=='-TorrServer') { CreateLinksFromTorrServer(); return; }
     
     // Поиск ссылки на домен (начинающийся на http), если в текущем элементе не полная ссылка
@@ -613,8 +618,8 @@ void CheckPodcastUpdate() {
       HmsRegExMatch('^(.*?//.*/)', mpFilePath, gsLongBase);           // Получаем gsLongBase (до последнего слеша)
       
       // Пытаемся получить конфиг для данного домена
-      HmsRegExMatch('//([^/]+)', mpFilePath, sDomen); CONFIG = CONFIG[sDomen];
-      if (CONFIG == nil) { Error('Для домена '+sDomen+' нет правил. Навигация невозможна.'); return; }
+      HmsRegExMatch('//([^/]+)', mpFilePath, sDomen); if (Trim(sDomen)=='') { Error('Каталог или файл "'+mpFilePath+'" не существует.'       ); return; }
+      CONFIG = CONFIG[sDomen];                        if (CONFIG == nil   ) { Error('Для домена '+sDomen+' нет правил. Навигация невозможна.'); return; }
       
       gsPHPProxy = CONFIG.S['PHProxy'];
       if (gsPHPProxy!='') mpFilePath = gsPHPProxy+'?'+HmsPercentDecode(HmsExpandLink(mpFilePath, gsUrlBase));
